@@ -75,3 +75,64 @@ EXIT` 确保清理。
 - JSON 示例文件中 `model` 写死为 `$API_MODEL`，Anthropic 原生格式（`chat-claude.json`）
   实际未测试，需配置对应 API_URL 后验证。
 
+## TASK:20260509-160151
+-----------------------
+
+- 关联需求：TODO:2026-05-09/2
+- 执行工具：Claude Code（claude-sonnet-4-6）
+
+为 `bash/ai-curl.sh` 增加 `--simple|-s` 和 `--system` 两个选项，支持将纯文本
+直接作为聊天输入，无需手写 JSON，实现单轮快捷聊天。
+
+### 变更总结
+
+修改文件：
+- `bash/ai-curl.sh` — 新增约 80 行，包括选项解析、`json_escape` 函数、simple 模式 JSON 拼装逻辑
+
+新增功能：
+- `--simple` / `-s`：将 STDIN 或位置参数文件视为纯文本，自动拼装为最简 chat JSON；
+  若文件名以 `.json` 结尾则自动忽略，沿用原有行为。
+- `--system <msg>`：在 simple 模式下于 messages 数组头部插入 system 消息；
+  值以 `@` 开头时读取对应文件内容，否则直接使用字符串。
+
+### 关键设计与权衡
+
+**JSON 转义方案**：纯 `sed` + `awk`，无额外依赖：
+- `sed` 处理三类字符：`\` → `\\`，`"` → `\"`，制表符 → `\t`
+- `awk` 负责多行拼接，行间插入字面 `\n`，最终输出单行 JSON 字符串值
+
+**转义顺序**：先转义 `\`（避免后续替换引入的 `\` 被二次转义），再转义 `"`。
+
+**临时文件链路**：STDIN → `TMP_STDIN` → `json_escape` → `TMP_SIMPLE`（含 `$API_MODEL` 占位符）
+→ `envsubst` → `TMP_SUBST` → curl，每步均纳入 `TMP_FILES` 统一清理。
+
+**`.json` 后缀判断**：在读取文件之前判断（位置参数已知时），避免对合法 JSON 文件做不必要的文本转义。
+
+**`--system` 作用域限制**：system 选项仅在 simple 模式下有意义，其他模式给出警告提示，不报错退出。
+
+### 测试验证
+
+以下命令在本地做了逻辑验证（未实际调用 API）：
+
+```bash
+# 普通文本
+echo 'Hello, who are you?' | json_escape   # → Hello, who are you?
+
+# 含引号
+echo 'Say "hello"' | json_escape           # → Say \"hello\"
+
+# 多行
+printf 'line1\nline2\nline3' | json_escape # → line1\nline2\nline3
+
+# 含反斜杠
+echo 'path\to\file' | json_escape          # → path\\to\\file
+
+# 拼装带 system 的 JSON 格式正确，model 字段含 $API_MODEL 占位符待 envsubst 替换
+```
+
+### 遗留未决任务
+
+- 未对真实 API 端到端测试（需有效的 `ai-curl.env` 配置）。
+- 尚未处理 `\r`（Windows 回车）的转义，如有跨平台需求可补充
+  `sed 's/\r/\\r/g'` 一步。
+

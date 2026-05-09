@@ -14,10 +14,12 @@ HAS_JQ=0
 command -v jq &>/dev/null && HAS_JQ=1
 
 usage() {
-    echo "用法: ai-curl [--env file] [--url url] [--key key] [--model model] [-j] [-d] [json_file]"
+    echo "用法: ai-curl [--env file] [--url url] [--key key] [--model model] [-j] [-d] [-s] [--system msg] [json_file]"
     echo "      从 STDIN 读取 JSON: ai-curl [选项] < input.json"
-    echo "  -j, --json   输出原始 JSON（默认用 jq 提取聊天内容）"
-    echo "  -d, --debug  打印最终 curl 命令到 stderr，并保留临时文件"
+    echo "  -j, --json      输出原始 JSON（默认用 jq 提取聊天内容）"
+    echo "  -d, --debug     打印最终 curl 命令到 stderr，并保留临时文件"
+    echo "  -s, --simple    将输入视为纯文本，自动拼装为最简 chat JSON（文件名以 .json 结尾时忽略）"
+    echo "  --system <msg>  在 chat JSON 中插入 system 消息；以 @ 开头时读取文件内容"
 }
 
 # 命令行参数（优先级最高）
@@ -27,16 +29,20 @@ OPT_MODEL=""
 OPT_ENV=""
 OPT_JSON=0
 OPT_DEBUG=0
+OPT_SIMPLE=0
+OPT_SYSTEM=""
 JSON_FILE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --env)        OPT_ENV="$2";   shift 2 ;;
-        --url)        OPT_URL="$2";   shift 2 ;;
-        --key)        OPT_KEY="$2";   shift 2 ;;
-        --model)      OPT_MODEL="$2"; shift 2 ;;
-        --json|-j)    OPT_JSON=1;     shift   ;;
-        --debug|-d)   OPT_DEBUG=1;    shift   ;;
+        --env)        OPT_ENV="$2";    shift 2 ;;
+        --url)        OPT_URL="$2";    shift 2 ;;
+        --key)        OPT_KEY="$2";    shift 2 ;;
+        --model)      OPT_MODEL="$2";  shift 2 ;;
+        --json|-j)    OPT_JSON=1;      shift   ;;
+        --debug|-d)   OPT_DEBUG=1;     shift   ;;
+        --simple|-s)  OPT_SIMPLE=1;    shift   ;;
+        --system)     OPT_SYSTEM="$2"; shift 2 ;;
         --help|-h)    usage; exit 0 ;;
         -*) echo "未知选项: $1" >&2; exit 1 ;;
         *)  JSON_FILE="$1"; shift ;;
@@ -95,9 +101,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# 如果文件名以 .json 结尾，忽略 --simple 选项
+if [[ -n "$JSON_FILE" && "$JSON_FILE" == *.json ]]; then
+    OPT_SIMPLE=0
+fi
+
 if [[ -n "$JSON_FILE" ]]; then
     if [[ ! -f "$JSON_FILE" ]]; then
-        echo "错误: JSON 文件不存在: $JSON_FILE" >&2
+        echo "错误: 文件不存在: $JSON_FILE" >&2
         exit 1
     fi
     DATA_FILE="$JSON_FILE"
@@ -110,6 +121,55 @@ else
     echo "错误: 请提供 JSON 文件或通过 STDIN 输入 JSON 数据" >&2
     usage >&2
     exit 1
+fi
+
+# --simple 模式：将纯文本内容拼装为最简 chat JSON
+# 将文本转义为 JSON 字符串（处理 \ " 换行 回车 制表符）
+json_escape() {
+    sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | \
+    awk 'NR>1{printf "\\n"} {printf "%s", $0} END{printf "\n"}'
+}
+
+if [[ $OPT_SIMPLE -eq 1 ]]; then
+    # 读取 system 消息内容
+    SYSTEM_CONTENT=""
+    if [[ -n "$OPT_SYSTEM" ]]; then
+        if [[ "$OPT_SYSTEM" == @* ]]; then
+            SYS_FILE="${OPT_SYSTEM:1}"
+            if [[ ! -f "$SYS_FILE" ]]; then
+                echo "错误: system 文件不存在: $SYS_FILE" >&2
+                exit 1
+            fi
+            SYSTEM_CONTENT="$(json_escape < "$SYS_FILE")"
+        else
+            SYSTEM_CONTENT="$(printf '%s' "$OPT_SYSTEM" | json_escape)"
+        fi
+    fi
+
+    # 读取用户消息内容（来自文件或临时文件中的 STDIN 内容）
+    USER_CONTENT="$(json_escape < "$DATA_FILE")"
+
+    # 拼装 JSON 写入新临时文件
+    TMP_SIMPLE="$(mktemp /tmp/ai-curl-XXXXXX.json)"
+    TMP_FILES+=("$TMP_SIMPLE")
+
+    {
+        printf '{\n  "model": "$API_MODEL",\n  "messages": [\n'
+        if [[ -n "$SYSTEM_CONTENT" ]]; then
+            printf '    {"role": "system", "content": "%s"},\n' "$SYSTEM_CONTENT"
+        fi
+        printf '    {"role": "user", "content": "%s"}\n' "$USER_CONTENT"
+        printf '  ]\n}\n'
+    } > "$TMP_SIMPLE"
+
+    DATA_FILE="$TMP_SIMPLE"
+
+    if [[ $OPT_DEBUG -eq 1 ]]; then
+        echo "[debug] simple 模式拼装的 JSON ($DATA_FILE):" >&2
+        cat "$DATA_FILE" >&2
+    fi
+elif [[ -n "$OPT_SYSTEM" ]]; then
+    echo "警告: --system 选项在非 --simple 模式下无效，已忽略" >&2
 fi
 
 # 若 JSON 文件中含有 $API_* 占位符，用 envsubst 做变量替换
