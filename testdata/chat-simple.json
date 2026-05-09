@@ -1,0 +1,9 @@
+{
+  "model": "$API_MODEL",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello, who are you?"
+    }
+  ]
+}

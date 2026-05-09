@@ -1,0 +1,11 @@
+{
+  "model": "$API_MODEL",
+  "max_tokens": 1024,
+  "system": "You are a helpful assistant.",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Explain what a REST API is in one paragraph."
+    }
+  ]
+}
