@@ -136,3 +136,72 @@ echo 'path\to\file' | json_escape          # → path\\to\\file
 - 尚未处理 `\r`（Windows 回车）的转义，如有跨平台需求可补充
   `sed 's/\r/\\r/g'` 一步。
 
+## TASK:20260511-165415
+-----------------------
+
+- 关联需求：TODO:2026-05-11/1
+- 执行工具：Claude Code（claude-sonnet-4-6）
+
+新建 `perl/ai-chat.pl` 脚本，将遵循 `docs/chat-format.md` 规范的 markdown 聊天
+文件解析转换为 AI API 的 JSON 请求体，可与 `bash/ai-curl.sh` 联用。
+
+### 实施步骤
+
+1. 阅读 `docs/chat-format.md`、`testdata/*.json` 及 `bash/ai-curl.sh` 了解现有格式与架构
+2. 新建 `perl/ai-chat.pl` 脚本
+3. 在 `testdata/` 中新增两个 `.md` 示例文件：`chat-hello.md`、`chat-system.md`
+
+### 变更总结
+
+新增文件：
+- `perl/ai-chat.pl` — 约 200 行，含 POD 内嵌文档
+- `testdata/chat-hello.md` — 简单问答示例
+- `testdata/chat-system.md` — 带系统提示词的多轮对话示例
+
+### 关键设计与权衡
+
+**JSON 处理**：使用 Perl 5 核心模块 `JSON::PP`（v5.14+ 自带），避免第三方依赖。
+模板中 `$API_MODEL` 等占位符是合法 JSON 字符串，`JSON::PP` 可正常解析；
+输出时使用 `->pretty->canonical(0)` 保持可读性，key 顺序跟随 Perl hash（不强排序）。
+
+**模板查找**：按优先级依次尝试 `--template` 选项、`./ai-chat.json`、`./.chatedit/ai-chat.json`、
+`~/.chatedit/ai-chat.json`，均未找到则使用内联最小模板 `{"model":"$API_MODEL","messages":[]}`。
+模板的 `messages` 字段（无论原值）总被解析内容替换。
+
+**Markdown 解析**：
+- 以行为单位扫描，用 `$in_code` 标志跟踪三反引号代码块，块内忽略所有特殊标记
+- `## role >>` 匹配（大小写不敏感）开启新对话段，同时 flush 上一段
+- `#` 开头（一级标题/注释）及不满足格式的 `##` 结束当前段
+- `###` 及更深层标题在对话段内保留为内容
+- `@file` / `!cmd` 在对话段内就地展开（注释段内展开暂未实现）
+- 最终 content 去掉尾部空行，行间以 `\n` 连接
+
+### 测试验证
+
+```bash
+# 基本功能
+perl perl/ai-chat.pl testdata/chat-hello.md
+# → 4 条 message，role/content 正确
+
+# 带模板
+perl perl/ai-chat.pl -t testdata/chat-system.json testdata/chat-system.md
+# → 保留 temperature/max_tokens 字段，messages 被替换
+
+# STDIN 输入 + 文档示例验证
+perl perl/ai-chat.pl < (docs example heredoc)
+# → 与 docs/chat-format.md 中期望 JSON 完全吻合
+
+# 代码块内特殊标记忽略
+perl perl/ai-chat.pl  (含 ``` 块的 heredoc)
+# → 块内 ## role >> 不触发新段，保留为内容
+
+# 调试模式
+perl perl/ai-chat.pl -d testdata/chat-hello.md
+# → stderr 打印模板来源、message 数量及每条 content_len
+```
+
+### 遗留未决任务
+
+- 注释段（`# `）下的 `@file` / `!cmd` 展开后递归解析多段对话的功能尚未实现
+- 尚未针对真实 API 端到端测试（需有效的 `ai-curl.env`）
+

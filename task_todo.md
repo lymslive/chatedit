@@ -61,4 +61,38 @@ echo "Hello, who are you?" | bin/ai-curl --simple
 
 ### DONE:20260509-160151
 
-## TODO: 用 perl 实现将 markdown 聊天文件转换为能发给 api 的 JSON 文件
+## TODO:2026-05-11/1 用 perl 实现将 markdown 聊天文件转换为能发给 api 的 JSON 文件
+
+新建 perl/ai-chat.pl 脚本，根据 `docs/chat-format.md` 文档描叙的格式解析文档，
+转为适合发往大模型 API 的 json 内容。
+
+文档主要提供对话内容，调用 API 所需的其他参数写在 json 模板文件中。
+模板文件优先级：
+- 支持 `--template|-t` 选项指定一个 json 模板文件
+- 当前目录 `./ai-chat.json`
+- 当前目录 ./.chatedit/ai-chat.json
+- 用户目录 ~/.chatedit/ai-chat.json
+- 内联固定模板类似 `testdata/chat-simple.json`
+
+模板文件可以省略 `messages` 或留个空数组，即使用非空 `messages` 也被文档解析内
+容替换。建议将 `messages` 空数组写在最后。
+
+实施要求，尽可能低依赖，只使用系统安装的 perl 5 自带模块，不额外从 cpan 下载第
+三方扩展模块。可以当前开发环境的 perl 安装情况为参考。
+
+输入内容如 `input.md` 文件名可放在命令行参数中，也可通过标准输入。
+目前可限定只允许一个输入文件，忽略多余文件。没有输入文件时，读取标准输入。
+
+输出 json 打印到标准输出。故脚本中若有任何调试或警告错误信息打印出标准错误。
+可以支持 `--debug|-d` 选项开启打印更详细的有助于调试问题的信息。
+
+这个脚本初步功能完成后，应该可以联用 `ai-curl.sh` 调用 API 。例如：
+
+cat docs/chat-format.md | perl/ai-chat.pl | bash/ai-curl.sh
+
+并且在 `testdata/` 子目录中也增加一两个 `.md` 示例文件。原来的 `.json` 示例文
+件应该能充当模板文件。
+
+perl 脚本实现开启 strict 模式，不要炫技晦涩，要求易读可维护。编写 pod 内嵌文档，
+其他注释保持简明。
+### DONE: 20260511-165415
