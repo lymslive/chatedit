@@ -205,3 +205,61 @@ perl perl/ai-chat.pl -d testdata/chat-hello.md
 - 注释段（`# `）下的 `@file` / `!cmd` 展开后递归解析多段对话的功能尚未实现
 - 尚未针对真实 API 端到端测试（需有效的 `ai-curl.env`）
 
+## TASK:20260511-215428
+-----------------------
+
+- 关联需求：TODO:2026-05-11/2
+- 执行工具：Claude Code（claude-sonnet-4-6）
+
+优化 `perl/ai-chat.pl` 的外部引入规则与错误处理，同时修复 `###` 子标题处理 bug。
+
+### 实施步骤
+
+1. 阅读 `task_todo.md` 需求、`perl/ai-chat.pl` 源码、`docs/chat-format.md`
+2. 修复 `###` 子标题 bug：`^##[^#]` 精确匹配二级标题，不再匹配 `###`
+3. 改造 `read_file_lines` / `run_command` 返回 `($ok, @lines)` 格式
+4. 在 `parse_chat` 调用处增加错误标记逻辑：失败加 `(Read Error)`，空输出加 `(Read Empty)`
+5. 移除旧注释（"注释段内 `@` 可展开"），更新 POD 文档
+6. 功能验证通过
+
+### 变更总结
+
+修改文件：
+- `perl/ai-chat.pl` — 修复 `###` bug、增加错误处理、更新注释与 POD 文档
+
+提交文件：
+- `perl/ai-chat.pl` — 主要变更
+- `docs/chat-format.md` — 上次任务漏提交，随本次补交
+
+### 关键设计与权衡
+
+**`###` bug 修复**：原 `^##` 正则会匹配 `###`，导致对话段内 `###` 子标题提前结束当前段。
+改为 `^##[^#]` 或 `^##$` 精确匹配恰好两个 `#` 开头的行。
+
+**错误处理设计**：`read_file_lines` 和 `run_command` 改为返回列表首元素 `$ok`（0/1）。
+调用处统一处理三种情况：失败、空输出、正常输出。
+"空输出"用 `grep { /\S/ }` 判断，全空白行也视为空。
+
+**`@`/`!` 限制范围**：需求要求只在 `## role >>` 段内有效，当前代码本来就在 `if ($cur_role)` 块内，
+只是旧注释错误说明"注释段内也可展开"，本次清除该错误注释。
+
+### 测试验证
+
+```
+# ### 子标题保留在对话段内
+echo '## Q >> 你好\n### 子标题\n继续' | perl ai-chat.pl
+→ content 包含全部三行
+
+# @ 文件不存在 → (Read Error)
+@/nonexistent/file.txt → "@/nonexistent/file.txt (Read Error)"
+
+# ! 命令失败 → (Read Error)
+! exit 1 → "! exit 1 (Read Error)"
+
+# ! 空输出 → (Read Empty)
+! echo "" → "! echo \"\" (Read Empty)"
+
+# ! 正常输出 → 内容行
+! echo "有输出" → "有输出"
+```
+

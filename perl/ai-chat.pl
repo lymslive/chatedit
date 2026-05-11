@@ -147,15 +147,15 @@ sub parse_chat {
         }
 
         # ## 开头但不是对话段标题 → 忽略/分隔，结束当前段
-        if ($line =~ /^##/) {
+        # 注意：只匹配恰好两个 # 开头（即 ^## 后不再跟 #），### 等子标题在对话段内为普通内容行
+        if ($line =~ /^##[^#]/ || $line eq '##') {
             $flush->();
             next;
         }
 
-        # # 开头 → 注释行，结束当前对话段；但 @ 或 ! 在注释段内可展开
-        if ($line =~ /^#/) {
+        # # 开头（且不是 ## 开头）→ 注释行，结束当前对话段
+		if ($line =~ /^#[^#]/ || $line eq '#') {
             $flush->();
-            # 注释段内不处理，继续读下一行
             next;
         }
 
@@ -165,8 +165,14 @@ sub parse_chat {
             if ($line =~ /^@\s*(\S.*)$/) {
                 my $path = $1;
                 $path =~ s/\s+$//;
-                my @included = read_file_lines($path);
-                push @cur_lines, @included;
+                my ($ok, @included) = read_file_lines($path);
+                if (!$ok) {
+                    push @cur_lines, "$line (Read Error)";
+                } elsif (!grep { /\S/ } @included) {
+                    push @cur_lines, "$line (Read Empty)";
+                } else {
+                    push @cur_lines, @included;
+                }
                 next;
             }
 
@@ -174,8 +180,14 @@ sub parse_chat {
             if ($line =~ /^!\s*(\S.*)$/) {
                 my $cmd = $1;
                 $cmd =~ s/\s+$//;
-                my @output = run_command($cmd);
-                push @cur_lines, @output;
+                my ($ok, @output) = run_command($cmd);
+                if (!$ok) {
+                    push @cur_lines, "$line (Read Error)";
+                } elsif (!grep { /\S/ } @output) {
+                    push @cur_lines, "$line (Read Empty)";
+                } else {
+                    push @cur_lines, @output;
+                }
                 next;
             }
 
@@ -195,30 +207,31 @@ sub normalize_role {
     return $abbr{ uc($role) } // lc($role);
 }
 
-# 读取文件内容为行数组
+# 读取文件内容为行数组，返回 ($ok, @lines)；$ok 为 0 表示读取失败
 sub read_file_lines {
     my ($path) = @_;
     unless (-f $path) {
         warn "警告: 引用文件不存在: $path\n";
-        return ();
+        return (0);
     }
     open my $fh, '<:utf8', $path
-        or do { warn "警告: 无法读取文件 '$path': $!\n"; return () };
+        or do { warn "警告: 无法读取文件 '$path': $!\n"; return (0) };
     my @lines = map { chomp; $_ } <$fh>;
     close $fh;
-    return @lines;
+    return (1, @lines);
 }
 
-# 执行 shell 命令，返回输出行数组
+# 执行 shell 命令，返回 ($ok, @lines)；$ok 为 0 表示命令失败
 sub run_command {
     my ($cmd) = @_;
     warn "[debug] 执行命令: $cmd\n" if $opt_debug;
     my $output = qx($cmd);
     if ($? != 0) {
         warn "警告: 命令退出码非零 ($?): $cmd\n";
+        return (0);
     }
     chomp $output;
-    return split /\n/, $output;
+    return (1, split /\n/, $output);
 }
 
 # 打印用法说明
@@ -280,11 +293,13 @@ C<E<gt>E<gt>> 后的内容为第一行，续行继续积累至下一个对话段
 
 =item C<@file> 引入文件
 
-在对话段内以 C<@> 开头的行，将指定文件内容插入当前 message。
+在对话段（C<## role E<gt>E<gt>>）内以 C<@> 开头的行，将指定文件内容插入当前 message。
+读取失败时输出原行并附加 C<(Read Error)>，无内容或仅空白时附加 C<(Read Empty)>。
 
 =item C<!cmd> 执行命令
 
-在对话段内以 C<!> 开头的行，执行 shell 命令，将标准输出插入当前 message。
+在对话段（C<## role E<gt>E<gt>>）内以 C<!> 开头的行，执行 shell 命令，将标准输出插入当前 message。
+命令失败（非零退出码）时输出原行并附加 C<(Read Error)>，无输出或仅空白时附加 C<(Read Empty)>。
 
 =item 代码块
 
