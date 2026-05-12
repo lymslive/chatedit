@@ -1,0 +1,16 @@
+{
+  "model": "$API_MODEL",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant. Answer concisely."
+    },
+    {
+      "role": "user",
+      "content": "What is the capital of France?"
+    }
+  ],
+  "temperature": 1.0,
+  "thinking": {"type": "disabled"},
+  "max_tokens": 2048
+}

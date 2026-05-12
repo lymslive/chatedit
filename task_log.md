@@ -338,3 +338,5 @@ perl/ai-chat.pl --encode --system "" ...               → messages 不含 syste
 新增文件：
 - `doing_plan.tmp/http-alternatives.md` — HTTP 请求方案评估文档
 
+### COMMIT: cc2396e1080cd304168743651c2494b532f63849
+
