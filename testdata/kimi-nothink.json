@@ -10,7 +10,6 @@
       "content": "What is the capital of France?"
     }
   ],
-  "temperature": 1.0,
   "thinking": {"type": "disabled"},
   "max_tokens": 2048
 }

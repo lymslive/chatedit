@@ -340,3 +340,39 @@ perl/ai-chat.pl --encode --system "" ...               → messages 不含 syste
 
 ### COMMIT: cc2396e1080cd304168743651c2494b532f63849
 
+## 20260512-183920
+
+**需求**: TODO:2026-05-12/3 模型回复中文时偶发乱码分析与修复
+
+### 根因分析
+
+`call_api()` 函数（`perl/ai-chat.pl` 第 277 行）对写临时 JSON 文件的句柄设置了
+`:utf8` 层，但 `$request_json` 变量已经是 `JSON::PP->new->utf8->encode` 输出的
+UTF-8 字节串（Perl 内部无 utf8 flag）。将字节串写入 `:utf8` 句柄会触发双重编码：
+汉字 3 字节变 6 字节，curl 发送乱码给 API，返回结果也乱。
+
+- `testdata/chat-system.md` 正常：模板及该文件内容均为 ASCII，双重编码不影响单字节字符
+- `--encode | bash/ai-curl.sh` 正常：`--encode` 写默认 STDOUT（无 `:utf8` 层），字节原样输出
+
+### 修复
+
+将 `call_api()` 中 `binmode $tmp_fh, ':utf8'` 改为 `binmode $tmp_fh, ':raw'`，一行改动。
+
+### 关于"去掉 utf8 模式只当字节流"的疑问
+
+真正纯字节方案行不通：若输入以 `:raw` 读取，Perl 字符串无 utf8 flag，
+`JSON::PP->utf8->encode` 会把每个字节当 Latin-1 码点重新 UTF-8 编码，汉字反而乱。
+
+正确的做法是在 IO 边界保持一致：
+- 输入 `:utf8` 读 → Perl 内部字符串
+- `JSON::PP->utf8->encode` → UTF-8 字节串
+- 写文件/curl 用 `:raw`（这是修复的关键）
+- API 返回字节 → `JSON::PP->utf8->decode` → Perl 字符串
+- 打印终端 `:utf8`
+
+性能上 UTF-8 编解码对话文本可忽略不计。
+
+### 变更文件
+
+- `perl/ai-chat.pl` — `call_api()` 一行 bugfix
+

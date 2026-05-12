@@ -273,7 +273,7 @@ sub call_api {
 
     # 写入临时文件（避免命令行长度限制，也更安全）
     my ($tmp_fh, $tmp_file) = tempfile(DIR => '/tmp', SUFFIX => '.json', UNLINK => 0);
-    binmode $tmp_fh, ':utf8';
+    binmode $tmp_fh, ':raw';
     print $tmp_fh $json;
     close $tmp_fh;
 
