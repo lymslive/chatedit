@@ -119,7 +119,7 @@ docs/chat-format.md 可随本次任务一起提交，上个任务漏提交了。
 
 ### DONE: 20260511-215428
 
-## TODO:2026-05-11/3 扩展 ai-chat.pl 集成 ai-curl 实际发送功能
+## TODO:2026-05-12/1 扩展 ai-chat.pl 集成 ai-curl 实际发送功能
 
 当前这两个脚本必须管理联用，如 
 cat input.md | perl/ai-chat.pl | bash/ai-curl.sh
@@ -127,3 +127,84 @@ cat input.md | perl/ai-chat.pl | bash/ai-curl.sh
 现想将发送功能集成到一个脚本，两个目的：
 - 提升效率，原 ai-curl.sh 脚本调用很多工具，开启多个进程
 - 支持原位修改输入的聊天文件.md，附在末尾，然后重复调用达到多轮聊天效果
+
+期望的功能流程：
+- 读取 md 文档
+- 结合模板拼装 json
+- 请求 https API
+- 解析 API 响应的 json，回写 md 文档
+
+扩充的命令行选项及相关功能：
+- 支持 ai-curl.sh 的 --env --url --key --model --system 选项，逻辑类似；
+- 模板 json 的 model 字段检查替换 `$API_MODEL` 环境变量；
+- 扩展 --system 功能，命令行未指定该选项时，可依次按优先级读取
+  (. | ./.charedit | ~/.charedit)/ai-chat.sys 文件，
+  可以用 `--system ""` 空参数或不带参数时抑止查找文件，
+  非空参数时将内容插入 messages 第一个元素，role = system
+- 支持 `-i` 选项(长选项名该用哪个单词？)表示原位修改输入的 `.md` 文件，
+  否则只将 API 回复内容打印至标准输出；
+  如果从标准输入无文件可修改，则先复制原输入到标准输出；
+- 支持无参选项 `--header` 表示打印额外的 `## role >>` 二级标题，回复的 role 一
+  般是 `assistant`；`-i` 隐含 `--header` ，并且输入文件最后一行不是空行时额外
+  加一空行，以便与原内容有分隔感；
+- 支持 `--encode` 选项跳过请求 API 请求及后续流程，相当于当前 `ai-chat.pl` 功
+  能，只打印组装的 json 内容至标准输出，忽略 `-i` 选项；此时以 pretty 格式打印
+  json 结果可用于观察调试，而正常流程要发送至 API 时，按压缩单行的 json 发送，
+  减少消耗；
+- 支持逆向操作的 `--decode` 选项，输入 json ，输出 mardown （仅有对话段二级标
+  题系列）
+
+最终应该支持的功能用法：
+```bash
+# --encode 降级兼容，保持与 ai-curl.sh 原始脚本的管道联用
+cat input.md | perl/ai-chat.pl --encode | bash/ai-curl.sh
+
+# --decode/--encode 互逆操作互相测验
+cat input.md | perl/ai-chat.pl --encode | perl/ai-chat.pl --decode
+
+# 原位修改下的多轮对话迭代
+perl/ai-chat.pl -i chat.md
+# 追加问题后再执行
+perl/ai-chat.pl -i chat.md
+...
+```
+
+关于执行 https 请求 API 的技术选型，我有几个备选想法：
+- 仍然调用 curl 工具，捕获输出，除 perl 解释器，curl 应该是唯一的额外进程，其
+  他字符串操作用 perl 完成；
+- 保持最低依赖，perl5 自带模块能否实现 https 请求
+- 从 cpan 额外安装最常用的 https 请求模块
+- 调查有没现成的开源模块已封装 openai 的 API 请求模块
+
+先采用第一种最简单的调用 curl 工具实现一个可用版本。其他几种方案的评估先写到
+`doing_plan.tmp/` 子目录的文档中，留作后续参考。
+
+调用 API 的错误处理，如果返回 json 包含错误，无法提取对话内容，则将返回的原始
+json 打印标准错误，忽略 `-i`；此前的其他任何错误也直接打印标准错误提前终止。
+
+### DONE: 20260512-122319
+
+## TODO: ai-chat.pl 支持流式响应与解析
+
+可以两种方式开启流式响应：
+- 命令行选项 --stream
+- json 模板中明确写入 `"stream":true`
+
+请分析流式响应是否会与原位修改文件的 `-i` 选项冲突，能如何解决吗？
+
+## TODO: 长期计划
+
+尝试用不同的语言实现基本的 AI 聊天功能。
+
+- [Y] bash 基本 curl 请求封装
+- [Z] perl 实现
+- [O] vim 插件集成
+- [O] 其他脚本实现如 python node
+- [O] 编译型实现，供预编译可执行程序，如 cpp rust go
+- [O] web 浏览器独立前端页面实现
+
+图例：
+- O: 未实施
+- X: 取消实现
+- Y: 已实施
+- Z: 实施中

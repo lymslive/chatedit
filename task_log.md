@@ -263,3 +263,78 @@ echo '## Q >> 你好\n### 子标题\n继续' | perl ai-chat.pl
 ! echo "有输出" → "有输出"
 ```
 
+### COMMIT: cd37422e892155d392b0fe3b03161655610c84bf
+
+## TASK:20260512-122319
+-----------------------
+
+- 关联需求：TODO:2026-05-11/1
+- 执行工具：Claude Code（claude-sonnet-4-6）
+
+### 任务需求
+
+扩展 `perl/ai-chat.pl`，将 `bash/ai-curl.sh` 的 API 调用能力集成进来，实现：
+- 直接读 `.md` 文件 → 组装 JSON → 调用 API → 写回文件（多轮对话）
+- 支持 `-i`（原位修改）、`--header`、`--encode`（降级兼容）、`--decode`（逆向解码）
+- 支持 `--env/--url/--key/--model` 连接参数，`--system` 及自动 `ai-chat.sys` 查找
+- 错误处理：API 响应含 error 字段时打印原始 JSON 到 stderr
+
+### 实施步骤
+
+1. 阅读 `perl/ai-chat.pl`、`bash/ai-curl.sh`、`ai-curl.env`、测试数据
+2. 评估 HTTP 请求技术方案，写入 `doing_plan.tmp/http-alternatives.md`，选定 curl 调用
+3. 全量重写 `perl/ai-chat.pl`，新增：
+   - `load_env` / `find_env_file` — env 文件加载与命令行优先级覆盖
+   - `open_input` — 支持文件与 STDIN（临时文件缓冲，解决宽字符 in-memory filehandle 问题）
+   - `inject_system` / `find_system_file` — system 消息自动注入
+   - `call_api` — 列表形式 open curl，避免 shell 注入，原始字节读取响应
+   - `parse_response` — 兼容 OpenAI 格式 `.choices[]` 与 Anthropic 格式 `.content[]`
+   - `print_response` / `append_to_file` — 带/不带 `--header` 的输出逻辑
+   - `decode_to_md` — `--decode` 逆向操作
+   - `decode_to_md` 及 `open_file_or_stdin` 以原始字节读取，供 JSON::PP->utf8->decode
+4. 调试 UTF-8 编码问题：统一在 `parse_response` 用 `->utf8->decode`，输出用 `>>:utf8`
+5. 测试验证（见下）
+
+### 关键设计
+
+**curl 调用**：用 `open my $fh, '-|', 'curl', ...` 列表形式，不经 shell，API key 安全
+**UTF-8 处理**：curl 响应以原始字节读取 → `JSON::PP->utf8->decode` → Perl 字符串 → `:utf8` 写文件
+**STDIN 缓冲**：写临时文件而非 in-memory string filehandle，避免宽字符层问题
+**`$API_MODEL` 替换**：模板 model 字段中 `$API_MODEL` 在 Perl 内替换，无需 envsubst
+
+### 测试验证
+
+```bash
+# --encode 兼容原有管道
+cat testdata/chat-hello.md | perl/ai-chat.pl --encode
+→ 输出正确 JSON，model=kimi-k2.5，messages 中文正常
+
+# --encode | --decode 互逆
+cat testdata/chat-hello.md | perl/ai-chat.pl --encode | perl/ai-chat.pl --decode
+→ 输出 ## user >> / ## assistant >> 对话段，内容还原正确
+
+# 直接 API 调用（--header）
+echo "## Q >>\n\n请介绍自己" | perl/ai-chat.pl --header
+→ 输出 ## assistant >> 标题 + AI 回复
+
+# -i 原位修改
+perl/ai-chat.pl -i /tmp/test-inplace.md
+→ 末尾追加 ## assistant >> 及 AI 回复，UTF-8 正确
+
+# --encode | bash/ai-curl.sh 管道兼容
+echo "## Q >> 1+1" | perl/ai-chat.pl --encode | bash/ai-curl.sh
+→ assistant: 2
+
+# --system 指定 / 抑止
+perl/ai-chat.pl --system "只用中文回答" --header ...   → 正常插入 system
+perl/ai-chat.pl --encode --system "" ...               → messages 不含 system
+```
+
+### 变更总结
+
+修改文件：
+- `perl/ai-chat.pl` — 全量扩展，保留原有 parse_chat / load_template 逻辑
+
+新增文件：
+- `doing_plan.tmp/http-alternatives.md` — HTTP 请求方案评估文档
+
