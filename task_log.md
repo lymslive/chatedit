@@ -444,7 +444,6 @@ prove perl/t/02-parse-chat.t   # 运行单个测试文件
 
 ### COMMIT: 4d3864dac66c2a716a6c4290beb33886b3e13130
 
-
 ## TASK:20260513-145043
 -----------------------
 
@@ -484,4 +483,48 @@ kimi-chat -i chat.md
 ### 测试验证
 
 `prove perl/t/` — 全部 95 个测试通过，无回归。
+
+### COMMIT: 3793274c754643a5f999ddea9502f7066377fea5
+
+## TASK:20260513-154929
+-----------------------
+
+**需求**: 2026-05-13/3 — ai-chat.pl 功能扩展 -j -s --postdir
+
+### 实现
+
+**`perl/ai-chat.pl`**
+
+- 将 `my $prog_name` 改为 `our $prog_name`，供单元测试文件直接覆盖
+- 新增三个选项变量及 `GetOptions` 注册：
+  - `$opt_simple` / `-s/--simple`：整个输入当成简单 user 消息，跳过 Markdown 解析
+  - `$opt_json` / `-j/--json`：直接输出原始 API 响应 JSON，忽略 `-i`
+  - `$opt_postdir` / `--postdir <dir>`：将请求 JSON 保存到指定目录，命名格式 `prog-yyyymmdd-hhmmss.json`
+- 在 `run()` 中：`--simple` 时 slurp 整个文件内容为单条 `user` 消息；`--json` 时在 `call_api` 后直接打印原始响应并退出
+- 提取 `save_to_postdir($dir, $json)` 辅助函数（便于单元测试），目录不存在时打印告警
+- 更新 `usage()` 说明与 POD 文档
+
+### 新增测试
+
+**`perl/t/07-new-options.t`**
+
+- `--simple --encode`：验证纯文本输入成为单条 `user` 消息（包含中文内容、忽略 Markdown 标记）
+- `save_to_postdir`：验证文件在目录中按时间戳命名创建，内容正确；目录不存在时打印告警
+- `--json`：mock `call_api`，验证原始 JSON 被直接输出
+
+**`perl/t/08-find-env.t`**
+
+- 覆盖 `find_env_file` 的各种查找路径：`--env` 显式路径、CWD `prog_name.env`、`.chatedit/prog_name.env`、`ai-chat.env` 回退、无文件时返回 undef
+- 覆盖 `load_env` 基本解析（KEY=value、注释行、空行）
+- 使用 `testdata/` 中的实际测试文件验证
+
+**testdata 新增文件**
+
+- `testdata/test-prog.env` — 用于 CWD 同名查找测试
+- `testdata/.chatedit/test-chatedit.env` — 用于 .chatedit 子目录查找测试
+- `testdata/ai-chat.env` — 用于 ai-chat.env 回退查找测试
+
+### 测试验证
+
+`prove perl/t/` — 全部 127 个测试通过（新增 32 个），无回归。
 

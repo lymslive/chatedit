@@ -33,6 +33,16 @@ perl/ai-chat.pl --encode chat.md | jq .
 # Decode: JSON request body → Markdown
 perl/ai-chat.pl --decode < testdata/chat-claude.json
 
+# Simple mode: treat whole input as a single user message (no Markdown parsing)
+echo "Explain recursion briefly" | perl/ai-chat.pl --simple
+echo "Explain recursion briefly" | perl/ai-chat.pl -s --encode | jq .
+
+# Raw JSON output: print API response JSON verbatim (ignores -i)
+perl/ai-chat.pl --json chat.md
+
+# Save request JSON to a directory for later inspection (no --debug noise)
+perl/ai-chat.pl --postdir post.tmp/ -i chat.md
+
 # Send a raw JSON file to the API
 bash/ai-curl.sh testdata/chat-simple.json
 

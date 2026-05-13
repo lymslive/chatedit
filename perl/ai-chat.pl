@@ -8,8 +8,8 @@ use JSON::PP;
 use File::Temp qw(tempfile);
 use File::Basename qw(basename);
 
-# 脚本名（去掉 .pl 后缀），用于配置文件自动查找
-my $prog_name = basename($0, '.pl');
+# 脚本名（去掉 .pl 后缀），用于配置文件自动查找（our 供测试文件覆盖）
+our $prog_name = basename($0, '.pl');
 
 # ---- 选项解析 ---------------------------------------------------------------
 
@@ -26,6 +26,9 @@ our $opt_key          = '';
 our $opt_model        = '';
 our $opt_system_given = 0;   # --system 是否被指定
 our $opt_system       = '';  # --system 的值（空串表示抑止自动查找）
+our $opt_simple       = 0;   # -s/--simple：整个输入当成简单 user 消息，跳过 Markdown 解析
+our $opt_json         = 0;   # -j/--json：直接输出原始 API 响应 JSON，忽略 -i
+our $opt_postdir      = '';  # --postdir：将请求 JSON 保存到指定目录
 
 unless (caller) { run() }
 
@@ -44,6 +47,9 @@ sub run {
         'key=s'        => \$opt_key,
         'model=s'      => \$opt_model,
         'system:s'     => sub { $opt_system_given = 1; $opt_system = defined $_[1] ? $_[1] : '' },
+        'simple|s'     => \$opt_simple,
+        'json|j'       => \$opt_json,
+        'postdir=s'    => \$opt_postdir,
     ) or do { usage(); exit 1 };
 
     if ($opt_help) { usage(); exit 0 }
@@ -68,8 +74,18 @@ sub run {
     my ($fh, $stdin_buffer) = open_input();
 
     my $template  = load_template();
-    my @messages  = parse_chat($fh);
-    close $fh;
+    my @messages;
+    if ($opt_simple) {
+        local $/;
+        my $content = <$fh>;
+        close $fh;
+        $content //= '';
+        $content =~ s/\s+$//;
+        @messages = ({ role => 'user', content => $content });
+    } else {
+        @messages = parse_chat($fh);
+        close $fh;
+    }
 
     # 注入 system 消息
     inject_system(\@messages);
@@ -99,7 +115,18 @@ sub run {
     my $request_json = JSON::PP->new->utf8->canonical(0)->encode($template);
     warn "[debug] 请求 JSON: $request_json\n" if $opt_debug;
 
+    # --postdir：将请求 JSON 保存到指定目录
+    save_to_postdir($opt_postdir, $request_json) if $opt_postdir ne '';
+
     my $response_json = call_api($request_json, $api_url, $api_key);
+
+    # --json：直接输出原始响应 JSON，忽略 -i
+    if ($opt_json) {
+        binmode STDOUT, ':raw';
+        print $response_json;
+        exit 0;
+    }
+
     my ($role, $content) = parse_response($response_json);
 
     if (!defined $content) {
@@ -273,6 +300,26 @@ sub find_system_file {
         return $f if -f $f;
     }
     return undef;
+}
+
+# --postdir：将请求 JSON 保存到指定目录，命名 <prog>-yyyymmdd-hhmmss.json
+sub save_to_postdir {
+    my ($dir, $json_str) = @_;
+    unless (-d $dir) {
+        warn "警告: --postdir 指定的目录不存在: $dir\n";
+        return;
+    }
+    my @t    = localtime(time);
+    my $ts   = sprintf('%04d%02d%02d-%02d%02d%02d',
+                       $t[5]+1900, $t[4]+1, $t[3], $t[2], $t[1], $t[0]);
+    my $save = "$dir/${prog_name}-${ts}.json";
+    if (open my $pfh, '>:raw', $save) {
+        print $pfh $json_str;
+        close $pfh;
+        warn "[debug] 已保存请求 JSON: $save\n" if $opt_debug;
+    } else {
+        warn "警告: 无法写入 postdir 文件 '$save': $!\n";
+    }
 }
 
 # 调用 API，返回响应 JSON 字符串
@@ -595,6 +642,9 @@ sub usage {
 选项（行为）:
   -i, --inplace      原位修改输入 .md 文件（隐含 --header）；STDIN 模式则复制输入到 STDOUT
   --header           在响应前打印 ## role >> 标题行
+  -s, --simple       将整个输入当成简单 user 消息，跳过 Markdown 解析
+  -j, --json         直接输出原始 API 响应 JSON，忽略 -i
+  --postdir <dir>    将发送的请求 JSON 保存到指定目录（命名格式：程序名-yyyymmdd-hhmmss.json）
   --encode           只输出组装的 JSON（pretty），不发送请求（与 ai-curl.sh 管道兼容）
   --decode           逆向：输入 API JSON，输出 markdown 对话段
 
@@ -691,6 +741,20 @@ system 消息内容；以 C<@file> 形式读取文件；不带参数或空参数
 =item B<--header>
 
 在响应内容前打印 C<## role E<gt>E<gt>> 标题行。
+
+=item B<-s>, B<--simple>
+
+将整个输入内容当成一段 user 消息，不解析 Markdown 格式。
+
+=item B<-j>, B<--json>
+
+直接将 API 原始响应 JSON 输出到标准输出，忽略 C<-i> 选项。
+
+=item B<--postdir> I<dir>
+
+将发送给 API 的请求 JSON 保存到指定目录，
+文件名格式为 C<程序名-yyyymmdd-hhmmss.json>。
+目录不存在时打印告警，不自动创建目录。
 
 =item B<--encode>
 
