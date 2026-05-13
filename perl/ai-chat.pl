@@ -6,6 +6,10 @@ use warnings;
 use Getopt::Long qw(GetOptions);
 use JSON::PP;
 use File::Temp qw(tempfile);
+use File::Basename qw(basename);
+
+# 脚本名（去掉 .pl 后缀），用于配置文件自动查找
+my $prog_name = basename($0, '.pl');
 
 # ---- 选项解析 ---------------------------------------------------------------
 
@@ -154,14 +158,13 @@ sub load_env {
     $ENV{API_MODEL} = $opt_model if $opt_model;
 }
 
-# 按优先级查找 env 文件
+# 按优先级查找 env 文件（先按脚本名，再回退通用名 ai-chat.env）
 sub find_env_file {
-    my @candidates = (
-        $opt_env,
-        './ai-curl.env',
-        './.chatedit/ai-curl.env',
-        "$ENV{HOME}/.chatedit/ai-curl.env",
-    );
+    my @candidates = ($opt_env);
+    for my $dir ('.', './.chatedit', "$ENV{HOME}/.chatedit") {
+        push @candidates, "$dir/$prog_name.env";
+        push @candidates, "$dir/ai-chat.env" if $prog_name ne 'ai-chat';
+    }
     for my $f (@candidates) {
         next unless defined $f && $f ne '';
         return $f if -f $f;
@@ -259,13 +262,13 @@ sub inject_system {
     }
 }
 
-# 按优先级查找 ai-chat.sys 文件
+# 按优先级查找 sys 文件（先按脚本名，再回退通用名 ai-chat.sys）
 sub find_system_file {
-    my @candidates = (
-        './ai-chat.sys',
-        './.chatedit/ai-chat.sys',
-        "$ENV{HOME}/.chatedit/ai-chat.sys",
-    );
+    my @candidates;
+    for my $dir ('.', './.chatedit', "$ENV{HOME}/.chatedit") {
+        push @candidates, "$dir/$prog_name.sys";
+        push @candidates, "$dir/ai-chat.sys" if $prog_name ne 'ai-chat';
+    }
     for my $f (@candidates) {
         return $f if -f $f;
     }
@@ -422,14 +425,13 @@ sub load_template {
     return $data;
 }
 
-# 按优先级查找模板文件，找不到返回 undef
+# 按优先级查找模板文件（先按脚本名，再回退通用名 ai-chat.json），找不到返回 undef
 sub find_template_file {
-    my @candidates = (
-        $opt_template,
-        './ai-chat.json',
-        './.chatedit/ai-chat.json',
-        "$ENV{HOME}/.chatedit/ai-chat.json",
-    );
+    my @candidates = ($opt_template);
+    for my $dir ('.', './.chatedit', "$ENV{HOME}/.chatedit") {
+        push @candidates, "$dir/$prog_name.json";
+        push @candidates, "$dir/ai-chat.json" if $prog_name ne 'ai-chat';
+    }
     for my $f (@candidates) {
         next unless defined $f && $f ne '';
         return $f if -f $f;
@@ -617,22 +619,22 @@ sub usage {
   # 抑止 system 自动查找
   perl/ai-chat.pl --system "" -i chat.md
 
-env 文件搜索顺序:
+env 文件搜索顺序（PROG 为脚本名去掉 .pl 后缀，如软链接 kimi-chat 则为 kimi-chat）:
   1. --env 指定的文件
-  2. ./ai-curl.env
-  3. ./.chatedit/ai-curl.env
-  4. ~/.chatedit/ai-curl.env
+  2. ./$PROG.env  （再回退 ./ai-chat.env）
+  3. ./.chatedit/$PROG.env  （再回退 ./.chatedit/ai-chat.env）
+  4. ~/.chatedit/$PROG.env  （再回退 ~/.chatedit/ai-chat.env）
 
 system 文件自动搜索顺序（未指定 --system 时）:
-  1. ./ai-chat.sys
-  2. ./.chatedit/ai-chat.sys
-  3. ~/.chatedit/ai-chat.sys
+  1. ./$PROG.sys  （再回退 ./ai-chat.sys）
+  2. ./.chatedit/$PROG.sys  （再回退 ./.chatedit/ai-chat.sys）
+  3. ~/.chatedit/$PROG.sys  （再回退 ~/.chatedit/ai-chat.sys）
 
 模板文件搜索顺序:
   1. --template 指定的文件
-  2. ./ai-chat.json
-  3. ./.chatedit/ai-chat.json
-  4. ~/.chatedit/ai-chat.json
+  2. ./$PROG.json  （再回退 ./ai-chat.json）
+  3. ./.chatedit/$PROG.json  （再回退 ./.chatedit/ai-chat.json）
+  4. ~/.chatedit/$PROG.json  （再回退 ~/.chatedit/ai-chat.json）
   5. 内联固定模板（仅含 model 和空 messages）
 USAGE
 }

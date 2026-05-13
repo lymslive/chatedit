@@ -442,3 +442,46 @@ prove perl/t/02-parse-chat.t   # 运行单个测试文件
 - `perl/t/05-mock-api.t`（新增）
 - `perl/t/06-encode-decode-roundtrip.t`（新增）
 
+### COMMIT: 4d3864dac66c2a716a6c4290beb33886b3e13130
+
+
+## TASK:20260513-145043
+-----------------------
+
+**需求**: 2026-05-13/2 — 自动查找辅助配置文件功能优化
+
+### 分析
+
+两个脚本中配置文件查找逻辑当前使用固定文件名，要改为随脚本名（`$0`）变化，
+并保留通用名（`ai-chat.env` / `ai-curl.env`）的回退兼容查找。
+
+`ai-chat.pl` 原来查的是 `ai-curl.env`，按需求同步纠正为先查 `ai-chat.env`。
+
+### 实现
+
+**`perl/ai-chat.pl`**
+
+- 新增 `use File::Basename qw(basename)` 及模块级变量 `$prog_name = basename($0, '.pl')`
+- 更新 `find_env_file`：candidates 从 `$opt_env` 开始，再对每个搜索目录依次加 `$prog_name.env` 和回退 `ai-chat.env`（仅当 `$prog_name ne 'ai-chat'` 时）
+- 同样模式更新 `find_system_file`（`.sys` 文件）
+- 同样模式更新 `find_template_file`（`.json` 文件）
+- 更新 usage 文档注明 `$PROG` 搜索规则
+
+**`bash/ai-curl.sh`**
+
+- 新增 `PROG="$(basename "$0" .sh)"` 取脚本名
+- 更新 `find_env_file`：对三个搜索目录依次加 `$PROG.env` 和回退 `ai-curl.env`（仅当 `$PROG != "ai-curl"`）
+
+### 软链接效果示例
+
+```bash
+ln -s /path/to/ai-chat.pl ~/bin/kimi-chat
+kimi-chat -i chat.md
+# 依次查找: ./kimi-chat.env, ./.chatedit/kimi-chat.env, ~/.chatedit/kimi-chat.env
+# 再回退:  ./ai-chat.env, ./.chatedit/ai-chat.env, ~/.chatedit/ai-chat.env
+```
+
+### 测试验证
+
+`prove perl/t/` — 全部 95 个测试通过，无回归。
+

@@ -25,7 +25,7 @@ cat chat.md | perl/ai-chat.pl --encode | bash/ai-curl.sh
 
 ### 1. 配置 API 环境
 
-在项目根目录（或 `~/.chatedit/`）创建 `ai-curl.env` 文件：
+在项目根目录（或 `~/.chatedit/`）创建 `ai-curl.env`（或 `ai-chat.env`）文件：
 
 ```bash
 API_URL=https://api.example.com/v1/chat/completions
@@ -93,11 +93,11 @@ perl/ai-chat.pl -i chat.md
   -h, --help        显示帮助
 ```
 
-env 文件查找顺序（优先级从高到低）：
+env 文件查找顺序（`$PROG` 为脚本名去掉 `.sh`，优先级从高到低）：
 1. `--env` 指定的文件
-2. `./ai-curl.env`
-3. `./.chatedit/ai-curl.env`
-4. `~/.chatedit/ai-curl.env`
+2. `./$PROG.env`（`$PROG != ai-curl` 时再回退 `./ai-curl.env`）
+3. `./.chatedit/$PROG.env`（同上回退）
+4. `~/.chatedit/$PROG.env`（同上回退）
 
 ### perl/ai-chat.pl
 
@@ -126,15 +126,15 @@ env 文件查找顺序（优先级从高到低）：
   -h, --help             显示帮助
 ```
 
-文件查找顺序（优先级从高到低）：
+文件查找顺序（`$PROG` 为脚本名去掉 `.pl`，优先级从高到低）：
 
-**env 文件**：`--env` > `./ai-curl.env` > `./.chatedit/ai-curl.env` > `~/.chatedit/ai-curl.env`
+**env 文件**：`--env` > `./$PROG.env`（回退 `./ai-chat.env`）> `./.chatedit/$PROG.env`（同上）> `~/.chatedit/$PROG.env`（同上）
 
 **system 文件**（未指定 `--system` 时自动查找）：
-`./ai-chat.sys` > `./.chatedit/ai-chat.sys` > `~/.chatedit/ai-chat.sys`
+`./$PROG.sys`（回退 `./ai-chat.sys`）> `./.chatedit/$PROG.sys`（同上）> `~/.chatedit/$PROG.sys`（同上）
 
 **模板 JSON 文件**：
-`--template` > `./ai-chat.json` > `./.chatedit/ai-chat.json` > `~/.chatedit/ai-chat.json` > 内联默认模板
+`--template` > `./$PROG.json`（回退 `./ai-chat.json`）> `./.chatedit/$PROG.json`（同上）> `~/.chatedit/$PROG.json`（同上）> 内联默认模板
 
 ## Markdown 聊天文件格式
 

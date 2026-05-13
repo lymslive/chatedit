@@ -43,20 +43,20 @@ echo "Hello" | bash/ai-curl.sh --simple --system @testdata/system-chinese.txt
 
 ## Configuration
 
-Create `ai-curl.env` (standard shell assignment syntax, no spaces around `=`):
+Create an env file (standard shell assignment syntax, no spaces around `=`):
 ```bash
 API_URL=https://api.example.com/v1/chat/completions
 API_KEY=sk-xxxxxxxx
 API_MODEL=gpt-4o
 ```
 
-Both scripts search for this file in order (highest priority first):
+Both scripts derive the env filename from the script name (`$0` with `.pl`/`.sh` stripped), so a symlink `kimi-chat` → `ai-chat.pl` will look for `kimi-chat.env` first, then fall back to the generic name. Search order (highest priority first):
 1. `--env <file>` option
-2. `./ai-curl.env`
-3. `./.chatedit/ai-curl.env`
-4. `~/.chatedit/ai-curl.env`
+2. `./$PROG.env`  (fallback: `./ai-curl.env` / `./ai-chat.env`)
+3. `./.chatedit/$PROG.env`  (fallback: `./.chatedit/ai-curl.env` / `./.chatedit/ai-chat.env`)
+4. `~/.chatedit/$PROG.env`  (fallback: `~/.chatedit/ai-curl.env` / `~/.chatedit/ai-chat.env`)
 
-`ai-chat.pl` additionally auto-searches for a system prompt file `ai-chat.sys` in the same locations (unless `--system` is given). A JSON template file `ai-chat.json` is similarly searched for the API request template.
+`ai-chat.pl` additionally auto-searches for a system prompt file (`$PROG.sys`, fallback `ai-chat.sys`) and a JSON template file (`$PROG.json`, fallback `ai-chat.json`) in the same three directories.
 
 ## Markdown Chat Format (`docs/chat-format.md`)
 
@@ -80,7 +80,7 @@ file can be `require`d by tests without side effects. Option variables are decla
 
 The main flow inside `run()`:
 1. `GetOptions` — parse CLI flags into `our $opt_*` globals
-2. `load_env()` — load `ai-curl.env`, apply CLI overrides
+2. `load_env()` — load env file (by script name, fallback `ai-chat.env`), apply CLI overrides
 3. `open_input()` — open file or buffer STDIN to a temp file
 4. `load_template()` — load JSON template (fallback: inline `{"model":"$API_MODEL","messages":[]}`)
 5. `parse_chat()` — parse Markdown into `[{role, content}, ...]` message array

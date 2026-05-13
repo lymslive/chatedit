@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+# 脚本名（去掉 .sh 后缀），用于配置文件自动查找
+PROG="$(basename "$0" .sh)"
+
 # 检查核心依赖
 if ! command -v curl &>/dev/null; then
     echo "错误: 未找到 curl，请先安装" >&2
@@ -49,14 +52,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# 查找 env 文件（按优先级）
+# 查找 env 文件（先按脚本名，再回退通用名 ai-curl.env）
 find_env_file() {
-    local candidates=(
-        "$OPT_ENV"
-        "./ai-curl.env"
-        "./.chatedit/ai-curl.env"
-        "$HOME/.chatedit/ai-curl.env"
-    )
+    local -a candidates=("$OPT_ENV")
+    local -a dirs=("." "./.chatedit" "$HOME/.chatedit")
+    for dir in "${dirs[@]}"; do
+        candidates+=("$dir/${PROG}.env")
+        [[ "$PROG" != "ai-curl" ]] && candidates+=("$dir/ai-curl.env")
+    done
     for f in "${candidates[@]}"; do
         if [[ -n "$f" && -f "$f" ]]; then
             echo "$f"

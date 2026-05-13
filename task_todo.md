@@ -230,7 +230,24 @@ perl/ai-chat.pl -t testdata/kimi-nothink.json docs/chat-format.md --encode | bas
 
 ### DONE: 20260513-122409
 
-## TODO: 自动查找辅助配置文件功能优化
+## TODO:2026-05-13/2 自动查找辅助配置文件功能优化
+
+ai-chat.pl 与 ai-curl.sh 涉及自动查几种配置文件，当前是查固定文件名。
+想改为随程序脚本名变化，即 `$0` 。
+
+查找目录的优先级不变，仍是 ./ ./.chatedit/ ~/.chatedit/
+
+用意是允许用户为脚本创建软链接如 kimi-chat 至 ai-char.pl ，
+然后它就自动查找 kimi-chat.env kimi-chat.json kimi-chat.sys 等。
+最后仍支持回滚兼容查找通用的 ai-chat.env 等文件。
+
+目前 ai-chat.pl 查的是 ai-curl.env ，按此逻辑纠正为查 ai-chat.env
+
+注意如果不是直接执行脚本，而是通过解释器启动时，
+如 bash ai-curl.sh 或 perl ai-chat.pl
+脚本名仍能用 `$0` 正确获取吗？
+
+### DONE: 20260513-145043
 
 ## TODO: ai-chat.pl 支持流式响应与解析
 
