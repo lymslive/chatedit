@@ -74,16 +74,21 @@ Conversation segments start with `## role >>` (a level-2 heading):
 
 ## Architecture of `perl/ai-chat.pl`
 
-The main flow:
-1. `load_env()` — load `ai-curl.env`, apply CLI overrides
-2. `open_input()` — open file or buffer STDIN to a temp file
-3. `load_template()` — load JSON template (fallback: inline `{"model":"$API_MODEL","messages":[]}`)
-4. `parse_chat()` — parse Markdown into `[{role, content}, ...]` message array
-5. `inject_system()` — prepend system message if needed
-6. Substitute `$API_MODEL` in template's `model` field
-7. Either `--encode` (print JSON and exit), `--decode` (reverse operation), or call `call_api()` via `curl`
-8. `parse_response()` — handles both OpenAI-compatible (`.choices[].message.content`) and Anthropic native (`.content[].text`) response formats
-9. Write response back to file (`-i`) or print to stdout
+Entry point: `unless (caller) { run() }` — the `run()` sub holds all CLI/main logic, so the
+file can be `require`d by tests without side effects. Option variables are declared as `our`
+(package globals) so test files can set them directly.
+
+The main flow inside `run()`:
+1. `GetOptions` — parse CLI flags into `our $opt_*` globals
+2. `load_env()` — load `ai-curl.env`, apply CLI overrides
+3. `open_input()` — open file or buffer STDIN to a temp file
+4. `load_template()` — load JSON template (fallback: inline `{"model":"$API_MODEL","messages":[]}`)
+5. `parse_chat()` — parse Markdown into `[{role, content}, ...]` message array
+6. `inject_system()` — prepend system message if needed
+7. Substitute `$API_MODEL` in template's `model` field
+8. Either `--encode` (print JSON and exit), `--decode` (reverse operation), or call `call_api()` via `curl`
+9. `parse_response()` — handles both OpenAI-compatible (`.choices[].message.content`) and Anthropic native (`.content[].text`) response formats
+10. Write response back to file (`-i`) or print to stdout
 
 ## Dependencies
 
@@ -97,10 +102,32 @@ The main flow:
 
 ## Testing
 
-No formal test framework. Verify behavior manually with files in `testdata/`:
+Unit tests live in `perl/t/` and use only `Test::More` (bundled with Perl). Run with:
 
 ```bash
-# Round-trip encode/decode sanity check
+prove perl/t/          # run all unit tests
+prove perl/t/02-parse-chat.t   # run a single test file
+```
+
+Test files:
+
+| File | What it tests |
+|------|---------------|
+| `01-normalize-role.t` | `normalize_role` — abbreviation and case handling |
+| `02-parse-chat.t` | `parse_chat` — roles, comments, code blocks, `@file`, `!cmd` |
+| `03-parse-response.t` | `parse_response` — OpenAI / Anthropic / error / Unicode formats |
+| `04-decode-to-md.t` | `decode_to_md` — JSON → Markdown output |
+| `05-mock-api.t` | full pipeline with mock `call_api` (no real API calls needed) |
+| `06-encode-decode-roundtrip.t` | subprocess integration; encode↔decode idempotency over 2 iterations |
+
+**Mocking `call_api`**: override the sub via Perl's symbol table — no extra modules needed:
+```perl
+local *main::call_api = sub { return $canned_response_json };
+```
+
+Manual sanity checks with existing testdata:
+```bash
+# Round-trip encode/decode
 cat testdata/chat-hello.md | perl/ai-chat.pl --encode | perl/ai-chat.pl --decode
 
 # Inspect assembled JSON

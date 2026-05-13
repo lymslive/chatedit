@@ -9,116 +9,121 @@ use File::Temp qw(tempfile);
 
 # ---- 选项解析 ---------------------------------------------------------------
 
-my $opt_template     = '';
-my $opt_debug        = 0;
-my $opt_help         = 0;
-my $opt_encode       = 0;   # 只输出 JSON（pretty），不发请求（原 ai-chat.pl 行为）
-my $opt_decode       = 0;   # 输入 JSON，输出 markdown
-my $opt_inplace      = 0;   # 原位修改输入 .md 文件（-i / --inplace）
-my $opt_header       = 0;   # 打印 ## role >> 标题
-my $opt_env          = '';
-my $opt_url          = '';
-my $opt_key          = '';
-my $opt_model        = '';
-my $opt_system_given = 0;   # --system 是否被指定
-my $opt_system       = '';  # --system 的值（空串表示抑止自动查找）
+our $opt_template     = '';
+our $opt_debug        = 0;
+our $opt_help         = 0;
+our $opt_encode       = 0;   # 只输出 JSON（pretty），不发请求（原 ai-chat.pl 行为）
+our $opt_decode       = 0;   # 输入 JSON，输出 markdown
+our $opt_inplace      = 0;   # 原位修改输入 .md 文件（-i / --inplace）
+our $opt_header       = 0;   # 打印 ## role >> 标题
+our $opt_env          = '';
+our $opt_url          = '';
+our $opt_key          = '';
+our $opt_model        = '';
+our $opt_system_given = 0;   # --system 是否被指定
+our $opt_system       = '';  # --system 的值（空串表示抑止自动查找）
 
-GetOptions(
-    'template|t=s' => \$opt_template,
-    'debug|d'      => \$opt_debug,
-    'help|h'       => \$opt_help,
-    'encode'       => \$opt_encode,
-    'decode'       => \$opt_decode,
-    'inplace|i'    => \$opt_inplace,
-    'header'       => \$opt_header,
-    'env=s'        => \$opt_env,
-    'url=s'        => \$opt_url,
-    'key=s'        => \$opt_key,
-    'model=s'      => \$opt_model,
-    'system:s'     => sub { $opt_system_given = 1; $opt_system = defined $_[1] ? $_[1] : '' },
-) or do { usage(); exit 1 };
+unless (caller) { run() }
 
-if ($opt_help) { usage(); exit 0 }
+# 主运行入口：解析命令行选项并执行主流程
+sub run {
+    GetOptions(
+        'template|t=s' => \$opt_template,
+        'debug|d'      => \$opt_debug,
+        'help|h'       => \$opt_help,
+        'encode'       => \$opt_encode,
+        'decode'       => \$opt_decode,
+        'inplace|i'    => \$opt_inplace,
+        'header'       => \$opt_header,
+        'env=s'        => \$opt_env,
+        'url=s'        => \$opt_url,
+        'key=s'        => \$opt_key,
+        'model=s'      => \$opt_model,
+        'system:s'     => sub { $opt_system_given = 1; $opt_system = defined $_[1] ? $_[1] : '' },
+    ) or do { usage(); exit 1 };
 
-# -i 隐含 --header
-$opt_header = 1 if $opt_inplace;
+    if ($opt_help) { usage(); exit 0 }
 
-# ---- 加载环境变量 -----------------------------------------------------------
+    # -i 隐含 --header
+    $opt_header = 1 if $opt_inplace;
 
-load_env();
+    # ---- 加载环境变量 ---------------------------------------------------------
 
-# ---- 主流程 -----------------------------------------------------------------
+    load_env();
 
-if ($opt_decode) {
-    my $fh = open_file_or_stdin();
-    decode_to_md($fh);
+    # ---- 主流程 ---------------------------------------------------------------
+
+    if ($opt_decode) {
+        my $fh = open_file_or_stdin();
+        decode_to_md($fh);
+        close $fh;
+        exit 0;
+    }
+
+    my $input_file = @ARGV ? $ARGV[0] : undef;
+    my ($fh, $stdin_buffer) = open_input();
+
+    my $template  = load_template();
+    my @messages  = parse_chat($fh);
     close $fh;
-    exit 0;
-}
 
-my $input_file = @ARGV ? $ARGV[0] : undef;
-my ($fh, $stdin_buffer) = open_input();
+    # 注入 system 消息
+    inject_system(\@messages);
 
-my $template  = load_template();
-my @messages  = parse_chat($fh);
-close $fh;
+    # 替换模板 model 字段中的 $API_MODEL 占位符
+    my $model_val = $template->{model} // '';
+    if ($model_val =~ /\$\{?API_MODEL\}?/) {
+        $template->{model} = $ENV{API_MODEL} // $model_val;
+    }
 
-# 注入 system 消息
-inject_system(\@messages);
+    $template->{messages} = \@messages;
 
-# 替换模板 model 字段中的 $API_MODEL 占位符
-my $model_val = $template->{model} // '';
-if ($model_val =~ /\$\{?API_MODEL\}?/) {
-    $template->{model} = $ENV{API_MODEL} // $model_val;
-}
+    if ($opt_encode) {
+        # 只打印 JSON（pretty 格式，便于调试），兼容原有管道用法
+        my $json = JSON::PP->new->utf8->pretty->canonical(0);
+        print $json->encode($template);
+        exit 0;
+    }
 
-$template->{messages} = \@messages;
+    # ---- 调用 API -------------------------------------------------------------
 
-if ($opt_encode) {
-    # 只打印 JSON（pretty 格式，便于调试），兼容原有管道用法
-    my $json = JSON::PP->new->utf8->pretty->canonical(0);
-    print $json->encode($template);
-    exit 0;
-}
+    my $api_url = $ENV{API_URL} // '';
+    my $api_key = $ENV{API_KEY} // '';
+    die "错误: 未设置 API URL，请通过 --url 参数或 env 文件中的 API_URL 配置\n" unless $api_url;
+    die "错误: 未设置 API KEY，请通过 --key 参数或 env 文件中的 API_KEY 配置\n" unless $api_key;
 
-# ---- 调用 API ---------------------------------------------------------------
+    my $request_json = JSON::PP->new->utf8->canonical(0)->encode($template);
+    warn "[debug] 请求 JSON: $request_json\n" if $opt_debug;
 
-my $api_url = $ENV{API_URL} // '';
-my $api_key = $ENV{API_KEY} // '';
-die "错误: 未设置 API URL，请通过 --url 参数或 env 文件中的 API_URL 配置\n" unless $api_url;
-die "错误: 未设置 API KEY，请通过 --key 参数或 env 文件中的 API_KEY 配置\n" unless $api_key;
+    my $response_json = call_api($request_json, $api_url, $api_key);
+    my ($role, $content) = parse_response($response_json);
 
-my $request_json = JSON::PP->new->utf8->canonical(0)->encode($template);
-warn "[debug] 请求 JSON: $request_json\n" if $opt_debug;
+    if (!defined $content) {
+        print STDERR $response_json, "\n";
+        exit 1;
+    }
 
-my $response_json = call_api($request_json, $api_url, $api_key);
-my ($role, $content) = parse_response($response_json);
+    # ---- 输出响应 -------------------------------------------------------------
 
-if (!defined $content) {
-    print STDERR $response_json, "\n";
-    exit 1;
-}
-
-# ---- 输出响应 ---------------------------------------------------------------
-
-if ($opt_inplace && defined $input_file) {
-    # 有输入文件：原位追加
-    append_to_file($input_file, $role, $content);
-} elsif ($opt_inplace) {
-    # STDIN 模式：先复制原输入到 STDOUT（原始字节），再追加响应（utf8）
-    if (defined $stdin_buffer && length($stdin_buffer)) {
-        binmode STDOUT, ':raw';
-        print $stdin_buffer;
-        binmode STDOUT, ':utf8';
-        # 末尾非空行时补一空行
-        print "\n" if $stdin_buffer !~ /\n\s*$/;
+    if ($opt_inplace && defined $input_file) {
+        # 有输入文件：原位追加
+        append_to_file($input_file, $role, $content);
+    } elsif ($opt_inplace) {
+        # STDIN 模式：先复制原输入到 STDOUT（原始字节），再追加响应（utf8）
+        if (defined $stdin_buffer && length($stdin_buffer)) {
+            binmode STDOUT, ':raw';
+            print $stdin_buffer;
+            binmode STDOUT, ':utf8';
+            # 末尾非空行时补一空行
+            print "\n" if $stdin_buffer !~ /\n\s*$/;
+        } else {
+            binmode STDOUT, ':utf8';
+        }
+        print_response(\*STDOUT, $role, $content);
     } else {
         binmode STDOUT, ':utf8';
+        print_response(\*STDOUT, $role, $content);
     }
-    print_response(\*STDOUT, $role, $content);
-} else {
-    binmode STDOUT, ':utf8';
-    print_response(\*STDOUT, $role, $content);
 }
 
 # ============================================================================
@@ -449,6 +454,7 @@ sub parse_chat {
     my $flush = sub {
         return unless $cur_role;
         my $content = join("\n", @cur_lines);
+        $content =~ s/^\n+//;    # 去掉首部空行（decode 输出的标题后空行）
         $content =~ s/\n+$//;    # 去掉尾部空行
         push @messages, { role => $cur_role, content => $content };
         $cur_role  = '';

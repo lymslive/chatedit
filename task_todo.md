@@ -219,9 +219,16 @@ perl/ai-chat.pl -t testdata/kimi-nothink.json docs/chat-format.md --encode | bas
 
 ### DONE: 20260512-183920
 
-## TODO: 完善 perl 脚本实现的单元测试
+## TODO:2026-05-13/1 完善 perl 脚本实现的单元测试
 
 为 perl/ai-chat.pl 设计自动化单元测试。
+应符合 perl 社区测试规范。如果需要安装依赖模块，请先告知于我。
+
+测试代码也放在 perl 子目录。
+
+请求真实 API 可能较费时，单元测试如何模拟 api 响应？
+
+### DONE: 20260513-122409
 
 ## TODO: 自动查找辅助配置文件功能优化
 
