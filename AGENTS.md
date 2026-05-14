@@ -43,6 +43,13 @@ perl/ai-chat.pl --json chat.md
 # Save request JSON to a directory for later inspection (no --debug noise)
 perl/ai-chat.pl --postdir post.tmp/ -i chat.md
 
+# Streaming mode: print response in real-time; also append to file when -i is set
+perl/ai-chat.pl --stream chat.md
+perl/ai-chat.pl --stream -i chat.md
+
+# Stream + raw JSON: forward raw SSE lines to stdout
+perl/ai-chat.pl --stream --json chat.md
+
 # Send a raw JSON file to the API
 bash/ai-curl.sh testdata/chat-simple.json
 
@@ -96,8 +103,10 @@ The main flow inside `run()`:
 5. `parse_chat()` — parse Markdown into `[{role, content}, ...]` message array
 6. `inject_system()` — prepend system message if needed
 7. Substitute `$API_MODEL` in template's `model` field
-8. Either `--encode` (print JSON and exit), `--decode` (reverse operation), or call `call_api()` via `curl`
-9. `parse_response()` — handles both OpenAI-compatible (`.choices[].message.content`) and Anthropic native (`.content[].text`) response formats
+8. Detect streaming: `--stream` flag or `"stream":true` in template sets `$is_stream`
+9. Either `--encode` (print JSON and exit), `--decode` (reverse operation), or call API via `curl`
+   - Streaming path: `call_api_stream()` — reads SSE lines, prints deltas in real-time; if `-i` also appends full response to file
+   - Non-streaming path: `call_api()` → `parse_response()` — handles both OpenAI-compatible (`.choices[].message.content`) and Anthropic native (`.content[].text`) response formats
 10. Write response back to file (`-i`) or print to stdout
 
 ## Dependencies
@@ -129,6 +138,9 @@ Test files:
 | `04-decode-to-md.t` | `decode_to_md` — JSON → Markdown output |
 | `05-mock-api.t` | full pipeline with mock `call_api` (no real API calls needed) |
 | `06-encode-decode-roundtrip.t` | subprocess integration; encode↔decode idempotency over 2 iterations |
+| `07-simple-json-postdir.t` | `--simple`, `--json`, `--postdir` options |
+| `08-find-env.t` | `find_env_file` — config file search order |
+| `09-stream.t` | `_extract_stream_delta` (OpenAI/Anthropic SSE); `--stream --encode` sets `stream:true` |
 
 **Mocking `call_api`**: override the sub via Perl's symbol table — no extra modules needed:
 ```perl

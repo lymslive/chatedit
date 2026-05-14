@@ -528,3 +528,56 @@ kimi-chat -i chat.md
 
 `prove perl/t/` — 全部 127 个测试通过（新增 32 个），无回归。
 
+### COMMIT: d995479f4b948e7401210adfbe45b009adb7e253
+
+## TASK:20260514-121333
+-----------------------
+
+**需求**: 2026-05-14/1 — ai-chat.pl 支持流式响应与解析
+
+### 实现
+
+**`perl/ai-chat.pl`**
+
+- 新增全局选项 `$opt_stream` / `--stream`：启用流式 SSE 响应
+- 在 `run()` 中，build template 后检测流式：`$opt_stream` 或模板中已含 `"stream":true` 均触发
+  - 检测为流式时自动将 `$template->{stream} = JSON::PP::true` 写入请求 JSON
+  - `--encode` 模式下照常输出（含 stream:true），方便调试
+- 新增流式响应分支（`$is_stream` 时进入）：
+  - `$| = 1` autoflush，保证 delta 实时输出
+  - 若 `--header`（含 `-i` 隐含时）先打印 `## assistant >>` 再流式输出
+  - STDIN + `-i` 模式：先复制缓冲的原始输入到 stdout，再流式输出响应
+  - 流式结束后，若 `-i` + 有输入文件，还将完整响应追加到文件
+  - 若 `--json`，直接转发原始 SSE 行到 stdout
+
+- 新增 `call_api_stream($json, $url, $key)` 子函数：
+  - 与 `call_api` 相同的 curl 调用方式（临时文件、列表形式防注入）
+  - 按行读取响应，`$opt_json` 时转发原始行；否则解析 `data:` SSE 行
+  - 跳过 `[DONE]` 与解析失败的 chunk
+  - 返回 `($role, $accumulated_content)` 或 `(undef, undef)`（`--json` 模式）
+
+- 新增 `_extract_stream_delta($chunk, \$role)` 辅助函数：
+  - OpenAI/兼容格式：`choices[].delta.content`，首 chunk 更新 role
+  - Anthropic 原生格式：`type=content_block_delta` + `delta.type=text_delta` 提取 text
+  - Anthropic `type=message_start` 更新 role；其他 chunk 类型返回空串
+
+- 更新 `usage()` 与 POD 文档，添加 `--stream` 选项说明
+
+**`CLAUDE.md`**
+
+- Running the Tools 节添加 `--stream` 示例
+- 架构流程更新：步骤 8 分流式/非流式路径说明
+- 测试文件表补充 07/08/09
+
+### 新增测试
+
+**`perl/t/09-stream.t`** — 15 个测试
+
+- `_extract_stream_delta`：OpenAI 单词/空/中文/role 更新、Anthropic content_block_delta/message_start/ping、未知类型
+- `--stream --encode`：subprocess 验证输出 JSON 中 `stream` 字段为 true
+- 模板含 `stream:true`：subprocess 验证自动检测，无需 `--stream` 选项
+
+### 测试验证
+
+`prove perl/t/` — 全部 142 个测试通过（新增 15 个），无回归。
+
