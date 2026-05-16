@@ -583,7 +583,6 @@ kimi-chat -i chat.md
 
 ### COMMIT: 529bfe56008e51a69e0b5d9ba94d2f311dfb827f
 
-
 ## TASK:20260516-102547
 -----------------------
 
@@ -621,4 +620,65 @@ kimi-chat -i chat.md
 ### 测试验证
 
 `prove perl/t/` — 全部 161 个测试通过（新增 19 个），无回归。
+
+### COMMIT: c8f106ec0272a25efe032432a0db06aa23c5567c
+
+## TASK:20260516-154114
+-----------------------
+- 关联需求：TODO:2026-05-16/2
+- 执行工具：claude-code (claude-sonnet-4-6)
+
+重构 `ai-chat.pl` 交互逻辑：两阶段输出、选项合并重命名、拆分流式/非流式子函数、stderr 摘要。
+
+### 变更总结
+
+**`perl/ai-chat.pl`** — 主要重构
+
+选项重命名与合并：
+- `--inplace/-i` → `--append/-a`（语义更准确，只会追加文件末尾）
+- `--header` + `--fix-level` 合并为 `--reformat 0|1`（undef=自动）
+  - 写文件时默认 1（开启：添加 `## role >>` 标题行 + 修正标题等级）
+  - 打印 stdout 时默认 0（关闭）
+  - 显式指定时对所有输出路径生效
+
+两阶段输出：
+- 阶段一：始终打印 AI 回复到 stdout（不管是否有 `-a`）
+- 阶段二：`-a` + 实际文件时追加到文件，并向 stderr 输出摘要行：
+  `# <!-- N lines appended to file: path; reformated lines: N -->`
+- stdin + `-a` 特殊处理：stdout 充当"虚拟文件"，网络请求前先复制原 stdin 到 stdout；
+  阶段一与阶段二合并，按文件模式格式化输出（两阶段合并为一）
+
+主流程拆分：
+- 新增 `run_stream()` — 流式路径（含两阶段输出逻辑）
+- 新增 `run_non_stream()` — 非流式路径（含两阶段输出逻辑）
+- `run()` 负责准备工作后分发至两者，避免重复代码
+
+`fix_heading_level` 升级：
+- 列表上下文返回 `($new_content, $reformed_count)`，便于 `append_to_file` 统计
+
+`append_to_file` 升级：
+- 返回 `($lines_appended, $reformed_count)` 供调用方打印 stderr 摘要
+
+**`perl/t/10-fix-level.t`** — 重写测试
+
+- 更新所有 `$main::opt_fix_level` → `$main::opt_reformat`
+- 删除 `$main::opt_header`（已并入 `--reformat`）
+- 补充 `fix_heading_level` 列表上下文测试（count 返回值）
+- 补充 `print_response` 的 `$for_file` 参数测试（新增 for_file=1 场景）
+- 补充 `append_to_file` 返回值（lines/reformed 计数）测试
+
+**`perl/t/07-simple-json-postdir.t`** — 小更新
+
+- `$main::opt_inplace` → `$main::opt_append`
+- `$main::opt_header` → `$main::opt_reformat = undef`
+
+**`AGENTS.md`** — 文档同步
+
+- 更新示例命令（`-i` → `-a`，`--fix-level` → `--reformat`，新增 stdin+`-a` 示例）
+- 更新架构说明，描述两阶段输出与 `run_stream`/`run_non_stream` 拆分
+- 更新测试文件表格描述
+
+### 测试验证
+
+`prove perl/t/` — 全部 176 个测试通过，无回归。
 

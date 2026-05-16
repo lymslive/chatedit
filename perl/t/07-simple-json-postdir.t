@@ -168,10 +168,10 @@ sub run_script {
     # 重置所有选项到初始状态
     {
         no warnings 'once';
-        $main::opt_json    = 1;
-        $main::opt_inplace = 0;
-        $main::opt_header  = 0;
-        $main::opt_encode  = 0;
+        $main::opt_json     = 1;
+        $main::opt_append   = 0;
+        $main::opt_reformat = undef;
+        $main::opt_encode   = 0;
         $main::opt_decode  = 0;
         $main::opt_simple  = 0;
         $main::opt_postdir = '';

@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# 测试 --fix-level 选项：修正 AI 回复中的 Markdown 标题等级
+# 测试 --reformat 选项：修正 AI 回复标题等级 + 添加 ## role >> 标题行
 use strict;
 use warnings;
 use Test::More;
@@ -16,7 +16,7 @@ require "$Bin/../ai-chat.pl";
 }
 
 # ============================================================================
-# fix_heading_level：纯文本变换函数（不检查全局 opt_fix_level）
+# fix_heading_level：纯文本变换函数（列表上下文返回 ($content, $count)）
 # ============================================================================
 
 # h1 → h3（前置两个 #）
@@ -48,21 +48,33 @@ is(fix_heading_level("    缩进行"),   "    缩进行",     '缩进行不变')
     is(fix_heading_level($input), $want, '多行混合内容');
 }
 
+# 列表上下文：返回 ($content, $reformed_count)
+{
+    my ($out, $cnt) = fix_heading_level("## A\n\n普通行\n\n### B");
+    is($out, "### A\n\n普通行\n\n#### B", '列表上下文：内容正确');
+    is($cnt, 2, '列表上下文：reformatted count = 2');
+}
+
+{
+    my ($out, $cnt) = fix_heading_level("普通行\n另一行");
+    is($cnt, 0, '列表上下文：无标题时 count = 0');
+}
+
 # ============================================================================
-# append_to_file：写文件时默认 fix_level=1（undef 视为 1）
+# append_to_file：写文件时默认 reformat=1（undef 视为 1）
 # ============================================================================
 
 # undef → 默认行为：写文件时修正
 {
     no warnings 'once';
-    $main::opt_fix_level = undef;
+    $main::opt_reformat = undef;
 }
 {
     my ($tmp_fh, $tmp_file) = tempfile(SUFFIX => '.md', UNLINK => 1);
     print $tmp_fh "## user >>\n\n问题\n";
     close $tmp_fh;
 
-    append_to_file($tmp_file, 'assistant', "## 背景\n\n内容\n\n### 细节");
+    my ($lines, $reformed) = append_to_file($tmp_file, 'assistant', "## 背景\n\n内容\n\n### 细节");
 
     open my $rfh, '<:utf8', $tmp_file or die $!;
     local $/;
@@ -72,61 +84,64 @@ is(fix_heading_level("    缩进行"),   "    缩进行",     '缩进行不变')
     like($written,   qr/### 背景/,   'append_to_file(undef): h2 → h3 写入文件');
     like($written,   qr/#### 细节/,  'append_to_file(undef): h3 → h4 写入文件');
     unlike($written, qr/^## 背景/m,  'append_to_file(undef): 原 h2 不再出现');
+    like($written,   qr/## assistant >>/, 'append_to_file(undef): 标题行写入');
+    ok($reformed > 0, 'append_to_file(undef): reformed_count > 0');
+    ok($lines > 0,    'append_to_file(undef): lines_appended > 0');
 }
 
-# --fix-level 0 显式禁止修正（写文件也不修正）
+# --reformat 0 显式禁止修正（写文件也不修正）
 {
     no warnings 'once';
-    $main::opt_fix_level = 0;
+    $main::opt_reformat = 0;
 }
 {
     my ($tmp_fh, $tmp_file) = tempfile(SUFFIX => '.md', UNLINK => 1);
     print $tmp_fh "## user >>\n\n问题\n";
     close $tmp_fh;
 
-    append_to_file($tmp_file, 'assistant', "## 背景\n\n内容");
+    my ($lines, $reformed) = append_to_file($tmp_file, 'assistant', "## 背景\n\n内容");
 
     open my $rfh, '<:utf8', $tmp_file or die $!;
     local $/;
     my $written = <$rfh>;
     close $rfh;
 
-    like($written, qr/## 背景/, 'append_to_file(0): fix_level=0 时 h2 不变');
+    like($written,   qr/## 背景/, 'append_to_file(0): reformat=0 时 h2 不变');
+    unlike($written, qr/## assistant >>/, 'append_to_file(0): 无标题行');
+    is($reformed, 0, 'append_to_file(0): reformed_count = 0');
 }
 
-# --fix-level 1 显式开启修正（与默认相同）
+# --reformat 1 显式开启修正（与默认相同）
 {
     no warnings 'once';
-    $main::opt_fix_level = 1;
+    $main::opt_reformat = 1;
 }
 {
     my ($tmp_fh, $tmp_file) = tempfile(SUFFIX => '.md', UNLINK => 1);
     print $tmp_fh "## user >>\n\n问题\n";
     close $tmp_fh;
 
-    append_to_file($tmp_file, 'assistant', "## 背景\n\n内容");
+    my ($lines, $reformed) = append_to_file($tmp_file, 'assistant', "## 背景\n\n内容");
 
     open my $rfh, '<:utf8', $tmp_file or die $!;
     local $/;
     my $written = <$rfh>;
     close $rfh;
 
-    like($written, qr/### 背景/, 'append_to_file(1): fix_level=1 时 h2 → h3');
+    like($written, qr/### 背景/, 'append_to_file(1): reformat=1 时 h2 → h3');
+    like($written, qr/## assistant >>/, 'append_to_file(1): 标题行写入');
+    is($reformed, 1, 'append_to_file(1): reformed_count = 1');
 }
 
 # ============================================================================
-# print_response：标准输出时默认 fix_level=0（undef 视为 0）
+# print_response：stdout 时默认 reformat=0（undef 视为 0）
 # 用 ASCII 内容避免内存句柄的 UTF-8 字节 vs 字符匹配问题
 # ============================================================================
-{
-    no warnings 'once';
-    $main::opt_header    = 0;
-}
 
-# undef → 默认行为：stdout 不修正
+# undef → 默认行为：stdout 不修正，无标题行
 {
     no warnings 'once';
-    $main::opt_fix_level = undef;
+    $main::opt_reformat = undef;
 }
 {
     my $output = '';
@@ -134,13 +149,29 @@ is(fix_heading_level("    缩进行"),   "    缩进行",     '缩进行不变')
     print_response($fh, 'assistant', "## Section\n\nBody");
     close $fh;
 
-    like($output, qr/## Section/, 'print_response(undef): stdout 默认不修正 h2');
+    like($output,   qr/## Section/, 'print_response(undef,for_file=0): stdout 默认不修正 h2');
+    unlike($output, qr/## assistant >>/, 'print_response(undef,for_file=0): 无标题行');
 }
 
-# --fix-level 1 显式开启：stdout 也修正
+# for_file=1 时默认 reformat=1
 {
     no warnings 'once';
-    $main::opt_fix_level = 1;
+    $main::opt_reformat = undef;
+}
+{
+    my $output = '';
+    open my $fh, '>', \$output or die $!;
+    print_response($fh, 'assistant', "## Section\n\nBody", 1);
+    close $fh;
+
+    like($output, qr/### Section/,      'print_response(undef,for_file=1): h2 → h3');
+    like($output, qr/## assistant >>/, 'print_response(undef,for_file=1): 有标题行');
+}
+
+# --reformat 1 显式开启：stdout 也修正
+{
+    no warnings 'once';
+    $main::opt_reformat = 1;
 }
 {
     my $output = '';
@@ -148,13 +179,14 @@ is(fix_heading_level("    缩进行"),   "    缩进行",     '缩进行不变')
     print_response($fh, 'assistant', "## Section\n\nBody");
     close $fh;
 
-    like($output, qr/### Section/, 'print_response(1): fix_level=1 时 h2 → h3');
+    like($output, qr/### Section/,      'print_response(1): reformat=1 时 h2 → h3');
+    like($output, qr/## assistant >>/, 'print_response(1): 有标题行');
 }
 
-# --fix-level 0 显式禁止：stdout 不修正
+# --reformat 0 显式禁止：stdout 不修正
 {
     no warnings 'once';
-    $main::opt_fix_level = 0;
+    $main::opt_reformat = 0;
 }
 {
     my $output = '';
@@ -162,7 +194,8 @@ is(fix_heading_level("    缩进行"),   "    缩进行",     '缩进行不变')
     print_response($fh, 'assistant', "## Section\n\nBody");
     close $fh;
 
-    like($output, qr/## Section/, 'print_response(0): fix_level=0 时 h2 不变');
+    like($output,   qr/## Section/, 'print_response(0): reformat=0 时 h2 不变');
+    unlike($output, qr/## assistant >>/, 'print_response(0): 无标题行');
 }
 
 done_testing();

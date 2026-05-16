@@ -24,8 +24,11 @@ cat chat.md | perl/ai-chat.pl --encode | bash/ai-curl.sh
 No build step — these are interpreted scripts. Invoke directly:
 
 ```bash
-# Markdown chat → API → append response back to file (multi-turn workflow)
-perl/ai-chat.pl -i chat.md
+# Phase 1: print response to stdout (always happens)
+perl/ai-chat.pl chat.md
+
+# Phase 1 + Phase 2: also append response to file (multi-turn workflow)
+perl/ai-chat.pl -a chat.md
 
 # Encode only (print assembled JSON, no API call)
 perl/ai-chat.pl --encode chat.md | jq .
@@ -37,18 +40,26 @@ perl/ai-chat.pl --decode < testdata/chat-claude.json
 echo "Explain recursion briefly" | perl/ai-chat.pl --simple
 echo "Explain recursion briefly" | perl/ai-chat.pl -s --encode | jq .
 
-# Raw JSON output: print API response JSON verbatim (ignores -i)
+# Raw JSON output: print API response JSON verbatim (ignores -a)
 perl/ai-chat.pl --json chat.md
 
 # Save request JSON to a directory for later inspection (no --debug noise)
-perl/ai-chat.pl --postdir post.tmp/ -i chat.md
+perl/ai-chat.pl --postdir post.tmp/ -a chat.md
 
-# Streaming mode: print response in real-time; also append to file when -i is set
+# Streaming mode: print response in real-time; also append to file when -a is set
 perl/ai-chat.pl --stream chat.md
-perl/ai-chat.pl --stream -i chat.md
+perl/ai-chat.pl --stream -a chat.md
 
 # Stream + raw JSON: forward raw SSE lines to stdout
 perl/ai-chat.pl --stream --json chat.md
+
+# Reformat output (add ## role >> header + fix heading levels)
+perl/ai-chat.pl -a chat.md                 # reformat on by default when writing file
+perl/ai-chat.pl --reformat 1 chat.md       # force reformat even for stdout output
+perl/ai-chat.pl --reformat 0 -a chat.md    # disable reformat even when writing file
+
+# STDIN mode with --append: echo original input then append AI reply (both reformatted)
+cat chat.md | perl/ai-chat.pl -a
 
 # Send a raw JSON file to the API
 bash/ai-curl.sh testdata/chat-simple.json
@@ -105,9 +116,12 @@ The main flow inside `run()`:
 7. Substitute `$API_MODEL` in template's `model` field
 8. Detect streaming: `--stream` flag or `"stream":true` in template sets `$is_stream`
 9. Either `--encode` (print JSON and exit), `--decode` (reverse operation), or call API via `curl`
-   - Streaming path: `call_api_stream()` — reads SSE lines, prints deltas in real-time; if `-i` also appends full response to file
-   - Non-streaming path: `call_api()` → `parse_response()` — handles both OpenAI-compatible (`.choices[].message.content`) and Anthropic native (`.content[].text`) response formats
-10. Write response back to file (`-i`) or print to stdout
+10. If stdin + `--append`: copy raw stdin bytes to stdout before making the API call
+11. Dispatch to `run_stream()` or `run_non_stream()`:
+    - **Phase 1**: always print response to stdout (`--reformat` defaults to 0 for stdout, or 1 when stdin+`-a`)
+    - **Phase 2**: if `-a` + actual file, call `append_to_file()` (reformat defaults to 1) and print stderr summary line
+    - Streaming (`call_api_stream()`): real-time delta output; accumulates full content for Phase 2
+    - Non-streaming (`call_api()` → `parse_response()`): handles OpenAI-compatible (`.choices[].message.content`) and Anthropic native (`.content[].text`) formats
 
 ## Dependencies
 
@@ -141,6 +155,7 @@ Test files:
 | `07-simple-json-postdir.t` | `--simple`, `--json`, `--postdir` options |
 | `08-find-env.t` | `find_env_file` — config file search order |
 | `09-stream.t` | `_extract_stream_delta` (OpenAI/Anthropic SSE); `--stream --encode` sets `stream:true` |
+| `10-fix-level.t` | `fix_heading_level` transformation (incl. count return); `--reformat` default per output path (file=1, stdout=0); `print_response` with `$for_file` flag |
 
 **Mocking `call_api`**: override the sub via Perl's symbol table — no extra modules needed:
 ```perl
