@@ -87,20 +87,7 @@ require "$Bin/../ai-chat.pl";
 # ---- --stream 选项在 --encode 模式下将 stream:true 写入 JSON ----------------------
 {
     my $script = "$Bin/../ai-chat.pl";
-    my $md     = "## user >> Hello\n";
-    my $json_out = do {
-        local $ENV{API_MODEL} = 'test-model';
-        # 避免脚本去查找 env 文件（覆盖 HOME，避免读真实配置）
-        local $ENV{HOME} = '/tmp';
-        open my $fh, '-|', $^X, $script, '--stream', '--encode', '--system', ''
-            or die "无法执行脚本: $!";
-        print {$fh} $md if 0;   # 占位，实际用 STDIN 注入
-        close $fh;
-        # 改用 pipe + fork
-        undef;
-    };
 
-    # 通过 open3 / 子进程拼接 STDIN 更可靠
     use IPC::Open2;
     my ($child_out, $child_in);
     my $pid = open2($child_out, $child_in,

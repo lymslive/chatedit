@@ -581,3 +581,44 @@ kimi-chat -i chat.md
 
 `prove perl/t/` — 全部 142 个测试通过（新增 15 个），无回归。
 
+### COMMIT: 529bfe56008e51a69e0b5d9ba94d2f311dfb827f
+
+
+## TASK:20260516-102547
+-----------------------
+
+**需求**: 2026-05-16/1 — 新增 `--fix-level` 选项修正 AI 回复标题等级
+
+### 实现
+
+**`perl/ai-chat.pl`**
+
+- 新增全局选项 `$opt_fix_level = undef`（undef 为自动模式）/ `--fix-level 0|1`
+- 新增 `fix_heading_level($content)` 纯文本变换函数（不检查全局，由调用方决定是否调用）：
+  - `h1`（`# text`）→ `h3`（`### text`）：将开头单个 `#` 替换为 `###`
+  - `h2+`（`## text` 及以上）→ 各加一级：前置一个 `#`
+  - 无空格的 `#标签` 不受影响（仅匹配 `^(#+) ` 模式）
+- 调用方差异化默认值：
+  - `append_to_file`（写回文件）：默认 `$opt_fix_level // 1`，即未指定时自动修正
+  - `print_response`（标准输出）：默认 `$opt_fix_level // 0`，即未指定时不修正
+  - 显式 `--fix-level 0/1` 同时覆盖两处行为
+- 更新 `usage()` 与 POD 文档，添加 `--fix-level` 选项说明
+
+**`perl/t/09-stream.t`**（顺带修复）
+
+- 删除 lines 91-101 的残留 `do{}` 块：该块用 `open '-|'` 生成子进程并继承测试进程
+  的真实 STDIN，导致 `prove` 运行时子进程阻塞等待终端输入，整个测试文件卡死。
+  该块本为废弃代码（结尾为 `undef`），实际测试已改由下方 `open2` 完成。
+
+### 新增测试
+
+**`perl/t/10-fix-level.t`** — 19 个测试
+
+- `fix_heading_level` 直接单元测试：h1→h3、h2→h3、h3→h4、h4→h5、无空格不变、普通行不变、多行混合
+- `append_to_file`：undef(默认修正) / 显式 0(不修正) / 显式 1(修正)
+- `print_response`：undef(默认不修正) / 显式 1(修正) / 显式 0(不修正)
+
+### 测试验证
+
+`prove perl/t/` — 全部 161 个测试通过（新增 19 个），无回归。
+
