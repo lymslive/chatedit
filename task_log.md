@@ -682,3 +682,36 @@ kimi-chat -i chat.md
 
 `prove perl/t/` — 全部 176 个测试通过，无回归。
 
+### COMMIT: e1aac485aed0c77cf5387ed5268f8e1240501351
+
+## TASK:20260516-180109
+-----------------------
+
+- 关联需求：TODO:2026-05-16/3 — ai-chat.pl 代码风格重构优化
+- 执行工具：claude-code (claude-sonnet-4-6)
+
+### 变更内容
+
+**`perl/ai-chat.pl`** — 综合重构
+
+- **Allman 大括号风格**：所有 `sub` 函数的开大括号改为独立新行，支持 vim `[[`/`]]` 跳转
+- **`open_stdin` / `open_input` 拆分**：抽出 `open_stdin` 处理 stdin 特殊逻辑（单循环同时写临时文件与 stdout），`open_input` 只返回单一文件句柄；`--encode` 时先抑止 `$opt_append`
+- **`find_config_file` 统一**：将 `find_env_file`/`find_system_file`/`find_template_file` 的共同搜索逻辑提取为 `find_config_file($suffix, $opt_val)`；三个函数保留为薄封装
+- **选项默认值 `undef` 化**：`$opt_env`/`$opt_template`/`$opt_system` 默认改为 `undef`（表示自动搜索），移除 `$opt_system_given`；`inject_system` 改用 `defined $opt_system` 判断
+- **`prepare_request_file`**：新函数，优先保存到 `--postdir`，失败时才创建临时文件，返回 `($file, $is_temp)`；`call_api`/`call_api_stream` 参数改为接收文件路径而非 JSON 字符串；临时文件清理移到 `run()` 统一处理
+- **curl 调试日志前移**：`[debug] curl: POST` 日志从 `call_api` 移至 `run()` 中分发前，流式与非流式路径共用
+- **精简注释**：删除显而易见或与代码重复的内联注释
+
+**`perl/CLAUDE.md`** — 新增 Perl 代码风格文件
+
+- 记录 Allman 大括号风格要求及 vim 跳转原理
+- 记录 `our` 全局变量、选项默认值 `undef` 语义、mock 方式等约定
+
+**`perl/t/05-mock-api.t`、`perl/t/07-simple-json-postdir.t`** — 移除 `$opt_system_given`
+
+**`perl/t/08-find-env.t`** — `$opt_env = ''` 全改为 `undef`（与新默认值语义一致）
+
+### 测试验证
+
+`prove perl/t/` — 全部 176 个测试通过，无回归。
+

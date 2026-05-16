@@ -12,8 +12,7 @@ require "$Bin/../ai-chat.pl";
 # 抑止 system 文件自动查找
 {
     no warnings 'once';
-    $main::opt_system_given = 1;
-    $main::opt_system       = '';
+    $main::opt_system = '';
 }
 
 my $script = "$Bin/../ai-chat.pl";
@@ -176,7 +175,6 @@ sub run_script {
         $main::opt_simple  = 0;
         $main::opt_postdir = '';
         $main::opt_model   = 'test-model';
-        $main::opt_system_given = 1;
         $main::opt_system  = '';
         @main::ARGV        = ();
     }

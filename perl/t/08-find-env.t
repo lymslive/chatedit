@@ -23,7 +23,7 @@ sub write_env_file {
 # 辅助：重置影响 find_env_file 的全局变量
 sub reset_env_opts {
     no warnings 'once';
-    $main::opt_env = '';
+    $main::opt_env = undef;
 }
 
 # ============================================================================
@@ -73,7 +73,7 @@ sub reset_env_opts {
     {
         no warnings 'once';
         $main::prog_name = 'my-bot';
-        $main::opt_env   = '';
+        $main::opt_env   = undef;
     }
 
     my $found = find_env_file();
@@ -99,7 +99,7 @@ sub reset_env_opts {
     {
         no warnings 'once';
         $main::prog_name = 'sub-bot';
-        $main::opt_env   = '';
+        $main::opt_env   = undef;
     }
 
     my $found = find_env_file();
@@ -125,7 +125,7 @@ sub reset_env_opts {
     {
         no warnings 'once';
         $main::prog_name = 'other-bot';
-        $main::opt_env   = '';
+        $main::opt_env   = undef;
     }
 
     my $found = find_env_file();
@@ -151,7 +151,7 @@ sub reset_env_opts {
     {
         no warnings 'once';
         $main::prog_name = 'priority-bot';
-        $main::opt_env   = '';
+        $main::opt_env   = undef;
     }
 
     my $found = find_env_file();
@@ -174,7 +174,7 @@ sub reset_env_opts {
     {
         no warnings 'once';
         $main::prog_name = 'no-env-bot';
-        $main::opt_env   = '';
+        $main::opt_env   = undef;
     }
 
     my $found = find_env_file();
@@ -237,7 +237,7 @@ sub reset_env_opts {
     {
         no warnings 'once';
         $main::prog_name = 'test-prog';
-        $main::opt_env   = '';
+        $main::opt_env   = undef;
     }
 
     my $found = find_env_file();
@@ -247,7 +247,7 @@ sub reset_env_opts {
     {
         no warnings 'once';
         $main::prog_name = 'test-chatedit';
-        $main::opt_env   = '';
+        $main::opt_env   = undef;
     }
 
     $found = find_env_file();

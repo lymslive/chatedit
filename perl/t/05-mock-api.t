@@ -15,8 +15,7 @@ require "$Bin/../ai-chat.pl";
 # 抑止 system 文件自动查找
 {
     no warnings 'once';
-    $main::opt_system_given = 1;
-    $main::opt_system       = '';
+    $main::opt_system = '';
 }
 
 # ---- 模拟 OpenAI 格式响应 ----------------------------------------------------
