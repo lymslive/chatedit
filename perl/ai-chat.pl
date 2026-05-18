@@ -55,14 +55,12 @@ sub run
 
     if ($opt_help) { usage(); exit 0 }
 
-    load_env();
-
     if ($opt_decode) {
-        my $fh = open_file_or_stdin();
-        decode_to_md($fh);
-        close $fh;
+        decode_to_md();
         exit 0;
     }
+
+    load_env();
 
     $opt_append = 0 if $opt_encode;    # --encode 时 --append 无效
 
@@ -205,9 +203,62 @@ sub run_stream
 # 子函数
 # ============================================================================
 
+# 读取整个文件内容，去除首尾空白，失败时 die
+sub read_file_content
+{
+    my ($file) = @_;
+    open my $fh, '<:utf8', $file
+        or die "错误: 无法读取文件 '$file': $!\n";
+    local $/;
+    my $content = <$fh>;
+    close $fh;
+    $content //= '';
+    $content =~ s/^\s+|\s+$//g;
+    return $content;
+}
+
+# 按优先级自动搜索配置文件（prog_name 所有目录优先于 ai-chat 回退）
+# 调用方负责在有命令行选项时跳过此函数
+sub find_config_file
+{
+    my ($suffix) = @_;
+    my @dirs  = ('.', './.chatedit', "$ENV{HOME}/.chatedit");
+    my @names = ("$prog_name.$suffix");
+    push @names, "ai-chat.$suffix" if $prog_name ne 'ai-chat';
+    for my $name (@names) {
+        for my $dir (@dirs) {
+            my $f = "$dir/$name";
+            if (-f $f) {
+                warn "[debug] 找到配置文件: $f\n" if $opt_debug;
+                return $f;
+            }
+        }
+    }
+    return undef;
+}
+
+sub find_env_file      { find_config_file('env') }
+sub find_system_file   { find_config_file('sys') }
+sub find_template_file { find_config_file('json') }
+
 sub load_env
 {
-    my $env_file = find_env_file();
+    my $env_file;
+    if (defined $opt_env) {
+        if (!$opt_env) {
+            warn "[debug] --env 指定为空/0，抑止 env 文件查找\n" if $opt_debug;
+        }
+        elsif (!-f $opt_env) {
+            warn "警告: --env 指定的文件不存在: $opt_env\n";
+        }
+        else {
+            $env_file = $opt_env;
+        }
+    }
+    else {
+        $env_file = find_env_file();
+    }
+
     if (defined $env_file) {
         warn "[debug] 加载 env 文件: $env_file\n" if $opt_debug;
         open my $fh, '<', $env_file
@@ -228,27 +279,76 @@ sub load_env
     $ENV{API_MODEL} = $opt_model if $opt_model;
 }
 
-# 统一配置文件查找：若 $opt_val 已定义则直接使用（不搜索），否则按优先级自动搜索
-sub find_config_file
+sub load_template
 {
-    my ($suffix, $opt_val) = @_;
-    if (defined $opt_val) {
-        return ($opt_val ne '' && -f $opt_val) ? $opt_val : undef;
+    my $file;
+    if (defined $opt_template) {
+        if (!$opt_template) {
+            warn "[debug] --template 指定为空/0，抑止模板文件查找\n" if $opt_debug;
+        }
+        elsif (!-f $opt_template) {
+            warn "警告: --template 指定的文件不存在: $opt_template\n";
+        }
+        else {
+            $file = $opt_template;
+        }
     }
-    my @candidates;
-    for my $dir ('.', './.chatedit', "$ENV{HOME}/.chatedit") {
-        push @candidates, "$dir/$prog_name.$suffix";
-        push @candidates, "$dir/ai-chat.$suffix" if $prog_name ne 'ai-chat';
+    else {
+        $file = find_template_file();
     }
-    for my $f (@candidates) {
-        return $f if -f $f;
+
+    my $text;
+    if (defined $file) {
+        warn "[debug] 模板文件: $file\n" if $opt_debug;
+        $text = read_file_content($file);
     }
-    return undef;
+    else {
+        warn "[debug] 使用内联默认模板\n" if $opt_debug;
+        $text = default_template();
+    }
+
+    my $data = eval { JSON::PP->new->utf8->decode($text) };
+    if ($@) {
+        die "错误: 模板 JSON 解析失败: $@\n";
+    }
+    return $data;
 }
 
-sub find_env_file      { find_config_file('env',  $opt_env) }
-sub find_system_file   { find_config_file('sys',  undef) }
-sub find_template_file { find_config_file('json', $opt_template) }
+sub default_template
+{
+    return '{"model":"$API_MODEL","messages":[]}';
+}
+
+sub inject_system
+{
+    my ($messages) = @_;
+    my $sys_content;
+
+    if (defined $opt_system) {
+        if ($opt_system && $opt_system ne '0') {
+            $sys_content = $opt_system;
+            if ($sys_content =~ /^@(.+)/) {
+                my $file = $1;
+                $file =~ s/^\s+|\s+$//g;
+                $sys_content = read_file_content($file);
+            }
+        }
+        # '' 或 '0' → 抑止，不插入
+    }
+    else {
+        my $sys_file = find_system_file();
+        if (defined $sys_file) {
+            warn "[debug] 使用 system 文件: $sys_file\n" if $opt_debug;
+            $sys_content = read_file_content($sys_file);
+        }
+    }
+
+    if (defined $sys_content && $sys_content ne '') {
+        if (!@$messages || $messages->[0]{role} ne 'system') {
+            unshift @$messages, { role => 'system', content => $sys_content };
+        }
+    }
+}
 
 # 从 STDIN 读取到临时文件；若 --append 同时将输入复制到 stdout
 sub open_stdin
@@ -290,59 +390,6 @@ sub open_input
         return $fh;
     }
     return open_stdin();
-}
-
-# 打开文件或 STDIN（用于 --decode 等无需缓冲的场景）
-sub open_file_or_stdin
-{
-    if (@ARGV) {
-        my $file = $ARGV[0];
-        open my $fh, '<:raw', $file
-            or die "错误: 无法打开文件 '$file': $!\n";
-        return $fh;
-    }
-    return \*STDIN;
-}
-
-sub inject_system
-{
-    my ($messages) = @_;
-    my $sys_content;
-
-    if (defined $opt_system) {
-        if ($opt_system ne '') {
-            $sys_content = $opt_system;
-            if ($sys_content =~ /^@(.+)/) {
-                my $file = $1;
-                $file =~ s/^\s+|\s+$//g;
-                open my $fh, '<:utf8', $file
-                    or die "错误: system 文件不存在: $file\n";
-                local $/;
-                $sys_content = <$fh>;
-                close $fh;
-                chomp $sys_content;
-            }
-        }
-        # $opt_system eq '' → 抑止，不插入
-    }
-    else {
-        my $sys_file = find_system_file();
-        if (defined $sys_file) {
-            open my $fh, '<:utf8', $sys_file
-                or die "错误: 无法读取 system 文件 '$sys_file': $!\n";
-            local $/;
-            $sys_content = <$fh>;
-            close $fh;
-            chomp $sys_content;
-            warn "[debug] 使用 system 文件: $sys_file\n" if $opt_debug;
-        }
-    }
-
-    if (defined $sys_content && $sys_content ne '') {
-        if (!@$messages || $messages->[0]{role} ne 'system') {
-            unshift @$messages, { role => 'system', content => $sys_content };
-        }
-    }
 }
 
 # 准备请求 JSON 文件：优先保存到 --postdir，失败时创建临时文件
@@ -519,18 +566,6 @@ sub parse_response
     return (undef, undef);
 }
 
-# 将响应打印到句柄
-# $for_file: 1=按文件模式（默认 reformat=1），0=按 stdout 模式（默认 reformat=0）
-sub print_response
-{
-    my ($fh, $role, $content, $for_file) = @_;
-    $for_file //= 0;
-    my $do_fmt = defined $opt_reformat ? $opt_reformat : ($for_file ? 1 : 0);
-    $content = fix_heading_level($content) if $do_fmt;
-    print $fh "## $role >>\n\n" if $do_fmt;
-    print $fh $content, "\n";
-}
-
 # 修正 AI 回复中的 Markdown 标题等级
 # h1 → h3，h2 → h3，h3+ 各增加一级
 sub fix_heading_level
@@ -552,6 +587,18 @@ sub fix_heading_level
     }
     my $result = join("\n", @lines);
     return wantarray ? ($result, $count) : $result;
+}
+
+# 将响应打印到句柄
+# $for_file: 1=按文件模式（默认 reformat=1），0=按 stdout 模式（默认 reformat=0）
+sub print_response
+{
+    my ($fh, $role, $content, $for_file) = @_;
+    $for_file //= 0;
+    my $do_fmt = defined $opt_reformat ? $opt_reformat : ($for_file ? 1 : 0);
+    $content = fix_heading_level($content) if $do_fmt;
+    print $fh "## $role >>\n\n" if $do_fmt;
+    print $fh $content, "\n";
 }
 
 # 追加响应到输入 .md 文件
@@ -592,53 +639,31 @@ sub append_to_file
     return ($lines_appended, $reformed_count);
 }
 
-# --decode: 输入 JSON 请求体，输出 markdown 对话段
+# --decode: 读取文件或 STDIN 中的 JSON 请求体，输出 markdown 对话段
 sub decode_to_md
 {
-    my ($fh) = @_;
-    local $/;
-    my $json_bytes = <$fh>;
+    my $json_bytes;
+    if (@ARGV) {
+        open my $fh, '<:raw', $ARGV[0]
+            or die "错误: 无法打开文件 '$ARGV[0]': $!\n";
+        local $/;
+        $json_bytes = <$fh>;
+        close $fh;
+    }
+    else {
+        local $/;
+        $json_bytes = <STDIN>;
+    }
 
     my $data = eval { JSON::PP->new->utf8->decode($json_bytes) };
     die "错误: 无法解析 JSON: $@\n" if $@;
 
     binmode STDOUT, ':utf8';
-    my $messages = $data->{messages} // [];
-    for my $msg (@$messages) {
+    for my $msg (@{ $data->{messages} // [] }) {
         my $role    = $msg->{role}    // 'unknown';
         my $content = $msg->{content} // '';
-        print "## $role >>\n\n";
-        print $content, "\n\n";
+        print "## $role >>\n\n$content\n\n";
     }
-}
-
-sub load_template
-{
-    my $file = find_template_file();
-    my $text;
-    if (defined $file) {
-        warn "[debug] 模板文件: $file\n" if $opt_debug;
-        open my $fh, '<:utf8', $file
-            or die "错误: 无法读取模板文件 '$file': $!\n";
-        local $/;
-        $text = <$fh>;
-        close $fh;
-    }
-    else {
-        warn "[debug] 使用内联默认模板\n" if $opt_debug;
-        $text = default_template();
-    }
-
-    my $data = eval { JSON::PP->new->utf8->decode($text) };
-    if ($@) {
-        die "错误: 模板 JSON 解析失败: $@\n";
-    }
-    return $data;
-}
-
-sub default_template
-{
-    return '{"model":"$API_MODEL","messages":[]}';
 }
 
 # 解析 markdown 聊天文件，返回 message 列表
@@ -699,7 +724,7 @@ sub parse_chat
             if ($line =~ /^@\s*(\S.*)$/) {
                 my $path = $1;
                 $path =~ s/\s+$//;
-                my ($ok, @included) = read_file_lines($path);
+                my ($ok, @included) = include_file($path);
                 if (!$ok) {
                     push @cur_lines, "$line (Read Error)";
                 }
@@ -743,7 +768,7 @@ sub normalize_role
     return $abbr{ uc($role) } // lc($role);
 }
 
-sub read_file_lines
+sub include_file
 {
     my ($path) = @_;
     unless (-f $path) {
@@ -793,13 +818,13 @@ sub usage
   --reformat 0|1    控制是否格式化输出（添加 ## role >> 标题行 + 修正标题等级）；
                      追加到文件时默认 1（开启），打印 stdout 时默认 0（关闭）
   -s, --simple       将整个输入当成简单 user 消息，跳过 Markdown 解析
-  -j, --json         直接输出原始 API 响应 JSON，忽略 -a
   --stream           启用流式响应（SSE）；实时打印到 stdout；若同时指定 -a 则完成后也追加到文件
-  --postdir <dir>    将发送的请求 JSON 保存到指定目录（命名格式：程序名-yyyymmdd-hhmmss.json）
 
 选项（调试）:
   --encode           只输出组装的 JSON（pretty），不发送请求（与 ai-curl.sh 管道兼容）
   --decode           逆向：输入 API JSON，输出 markdown 对话段
+  -j, --json         直接输出原始 API 响应 JSON，忽略 -a
+  --postdir <dir>    将发送的请求 JSON 保存到指定目录（命名格式：程序名-yyyymmdd-hhmmss.json）
   -d, --debug            打印调试信息到 stderr
   -h, --help             显示此帮助
 

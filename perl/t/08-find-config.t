@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# 测试 find_env_file：配置文件按脚本名自动查找，支持软链接多实例
+# 测试 find_config_file / load_env / load_template：配置文件按脚本名自动查找，支持软链接多实例
 use strict;
 use warnings;
 use Test::More;
@@ -12,7 +12,7 @@ require "$Bin/../ai-chat.pl";
 # 保存初始工作目录
 my $orig_dir = cwd();
 
-# 辅助：在 $dir 下创建内容为 "KEY=val\n" 的 env 文件
+# 辅助：在 $path 创建内容为 "KEY=val\n" 的 env 文件
 sub write_env_file {
     my ($path, $val) = @_;
     open my $fh, '>', $path or die "Cannot write $path: $!";
@@ -27,42 +27,51 @@ sub reset_env_opts {
 }
 
 # ============================================================================
-# 1. --env 显式指定路径优先级最高
+# 1. load_env: --env 显式指定已存在文件时正确加载
 # ============================================================================
 {
     my $tmpdir = tempdir(CLEANUP => 1);
     my $env_path = "$tmpdir/explicit.env";
     write_env_file($env_path, 'explicit-model');
 
+    delete $ENV{API_MODEL};
     {
         no warnings 'once';
-        $main::opt_env = $env_path;
+        $main::opt_env   = $env_path;
+        $main::opt_url   = '';
+        $main::opt_key   = '';
+        $main::opt_model = '';
     }
 
-    my $found = find_env_file();
-    is($found, $env_path, '--env explicit path: returns that path');
-
-    reset_env_opts();
-}
-
-# --env 指向不存在的文件时，返回 undef（不存在则跳过，继续查找）
-{
-    {
-        no warnings 'once';
-        $main::opt_env = '/tmp/nonexistent-should-not-exist.env';
-    }
-
-    my $found = find_env_file();
-    # 该路径不存在，find_env_file 跳过，继续查找其他候选
-    # 如果没有其他匹配文件，返回 undef
-    # 此处只验证不崩溃
-    ok(1, '--env nonexistent: does not crash');
+    load_env();
+    is($ENV{API_MODEL}, 'explicit-model', 'load_env: --env 显式文件正确加载');
 
     reset_env_opts();
 }
 
 # ============================================================================
-# 2. 当前目录下 $prog_name.env 查找
+# 2. load_env: --env 指向不存在的文件时，打印警告但不崩溃
+# ============================================================================
+{
+    {
+        no warnings 'once';
+        $main::opt_env   = '/tmp/nonexistent-should-not-exist-aichat.env';
+        $main::opt_url   = '';
+        $main::opt_key   = '';
+        $main::opt_model = '';
+    }
+
+    my $warned = '';
+    local $SIG{__WARN__} = sub { $warned .= $_[0] };
+    eval { load_env() };
+    ok(!$@, 'load_env: --env 指向不存在文件不崩溃');
+    like($warned, qr/警告.*不存在/, 'load_env: --env 不存在文件打印警告');
+
+    reset_env_opts();
+}
+
+# ============================================================================
+# 3. find_config_file: 当前目录下 $prog_name.env 查找
 # ============================================================================
 {
     my $tmpdir = tempdir(CLEANUP => 1);
@@ -73,7 +82,6 @@ sub reset_env_opts {
     {
         no warnings 'once';
         $main::prog_name = 'my-bot';
-        $main::opt_env   = undef;
     }
 
     my $found = find_env_file();
@@ -87,7 +95,7 @@ sub reset_env_opts {
 }
 
 # ============================================================================
-# 3. 当前目录下 .chatedit/$prog_name.env 查找（优先于 home .chatedit）
+# 4. find_config_file: .chatedit/$prog_name.env 优先于 ai-chat 回退名
 # ============================================================================
 {
     my $tmpdir = tempdir(CLEANUP => 1);
@@ -99,7 +107,6 @@ sub reset_env_opts {
     {
         no warnings 'once';
         $main::prog_name = 'sub-bot';
-        $main::opt_env   = undef;
     }
 
     my $found = find_env_file();
@@ -113,7 +120,7 @@ sub reset_env_opts {
 }
 
 # ============================================================================
-# 4. 回退到通用名 ai-chat.env（prog_name 不是 ai-chat 时）
+# 5. find_config_file: 回退到通用名 ai-chat.env（prog_name 不是 ai-chat 时）
 # ============================================================================
 {
     my $tmpdir = tempdir(CLEANUP => 1);
@@ -125,7 +132,6 @@ sub reset_env_opts {
     {
         no warnings 'once';
         $main::prog_name = 'other-bot';
-        $main::opt_env   = undef;
     }
 
     my $found = find_env_file();
@@ -139,23 +145,26 @@ sub reset_env_opts {
 }
 
 # ============================================================================
-# 5. prog_name 匹配的文件优先于 ai-chat.env 回退
+# 6. find_config_file: prog_name 所有目录优先于 ai-chat 回退（正确的跨目录顺序）
 # ============================================================================
 {
     my $tmpdir = tempdir(CLEANUP => 1);
     chdir($tmpdir) or die "Cannot chdir: $!";
 
-    write_env_file("$tmpdir/priority-bot.env", 'priority-model');
-    write_env_file("$tmpdir/ai-chat.env",      'fallback-model');
+    # ./ai-chat.env 存在，但 .chatedit/priority-bot.env 也存在
+    # 正确顺序：先遍历 prog_name 的所有目录，再遍历 ai-chat 回退
+    write_env_file("$tmpdir/ai-chat.env",           'fallback-model');
+    mkdir "$tmpdir/.chatedit" or die;
+    write_env_file("$tmpdir/.chatedit/priority-bot.env", 'priority-model');
 
     {
         no warnings 'once';
         $main::prog_name = 'priority-bot';
-        $main::opt_env   = undef;
     }
 
     my $found = find_env_file();
-    is($found, './priority-bot.env', 'prog_name.env takes priority over ai-chat.env');
+    is($found, './.chatedit/priority-bot.env',
+        'prog_name .chatedit/ takes priority over ./ai-chat.env fallback');
 
     chdir($orig_dir) or die;
     {
@@ -165,7 +174,7 @@ sub reset_env_opts {
 }
 
 # ============================================================================
-# 6. 没有任何 env 文件时返回 undef
+# 7. find_config_file: 没有任何 env 文件时返回 undef
 # ============================================================================
 {
     my $tmpdir = tempdir(CLEANUP => 1);
@@ -174,7 +183,6 @@ sub reset_env_opts {
     {
         no warnings 'once';
         $main::prog_name = 'no-env-bot';
-        $main::opt_env   = undef;
     }
 
     my $found = find_env_file();
@@ -188,7 +196,7 @@ sub reset_env_opts {
 }
 
 # ============================================================================
-# 7. load_env: 正确解析 env 文件并设置环境变量
+# 8. load_env: 正确解析 env 文件并设置环境变量
 # ============================================================================
 {
     my $tmpdir = tempdir(CLEANUP => 1);
@@ -201,7 +209,6 @@ sub reset_env_opts {
     print $fh "\n";
     close $fh;
 
-    # 清除相关环境变量
     delete $ENV{API_URL};
     delete $ENV{API_KEY};
     delete $ENV{API_MODEL};
@@ -224,7 +231,85 @@ sub reset_env_opts {
 }
 
 # ============================================================================
-# 8. 使用 testdata/ 中的实际测试文件验证（testdata 目录作为 CWD）
+# 9. load_env: --env 为空字符串时抑止查找，不加载任何 env 文件
+# ============================================================================
+{
+    my $tmpdir = tempdir(CLEANUP => 1);
+    chdir($tmpdir) or die "Cannot chdir: $!";
+    write_env_file("$tmpdir/ai-chat.env", 'should-not-load');
+    delete $ENV{API_MODEL};
+
+    {
+        no warnings 'once';
+        $main::opt_env   = '';    # 空字符串 → 抑止
+        $main::opt_url   = '';
+        $main::opt_key   = '';
+        $main::opt_model = '';
+    }
+
+    load_env();
+    ok(!defined $ENV{API_MODEL}, 'load_env: --env "" suppresses file search');
+
+    chdir($orig_dir) or die;
+    reset_env_opts();
+}
+
+# ============================================================================
+# 10. find_config_file('sys')：.sys 文件查找
+# ============================================================================
+{
+    my $tmpdir = tempdir(CLEANUP => 1);
+    chdir($tmpdir) or die "Cannot chdir: $!";
+
+    open my $fh, '>', "$tmpdir/my-bot.sys" or die;
+    print $fh "You are helpful.\n";
+    close $fh;
+
+    {
+        no warnings 'once';
+        $main::prog_name = 'my-bot';
+    }
+
+    my $found = find_system_file();
+    is($found, './my-bot.sys', 'find_system_file: prog_name.sys found in CWD');
+
+    chdir($orig_dir) or die;
+    {
+        no warnings 'once';
+        $main::prog_name = 'ai-chat';
+    }
+}
+
+# ============================================================================
+# 11. find_config_file('json')：.json 模板文件查找
+# ============================================================================
+{
+    my $tmpdir = tempdir(CLEANUP => 1);
+    chdir($tmpdir) or die "Cannot chdir: $!";
+
+    open my $fh, '>', "$tmpdir/ai-chat.json" or die;
+    print $fh '{"model":"test","messages":[]}', "\n";
+    close $fh;
+
+    {
+        no warnings 'once';
+        $main::prog_name = 'other-tool';
+        $main::opt_template = undef;
+    }
+
+    my $found = find_template_file();
+    is($found, './ai-chat.json', 'find_template_file: ai-chat.json fallback found');
+
+    chdir($orig_dir) or die;
+    {
+        no warnings 'once';
+        $main::prog_name    = 'ai-chat';
+        $main::opt_template = undef;
+    }
+}
+
+# ============================================================================
+# 12. 使用 testdata/ 中的实际测试文件验证（testdata 目录作为 CWD）
 # ============================================================================
 {
     my $testdata_dir = "$Bin/../../testdata";
@@ -237,21 +322,21 @@ sub reset_env_opts {
     {
         no warnings 'once';
         $main::prog_name = 'test-prog';
-        $main::opt_env   = undef;
     }
 
     my $found = find_env_file();
     is($found, './test-prog.env', 'testdata/test-prog.env found when CWD=testdata');
 
-    # test-chatedit 无同名 CWD 文件，但有 ai-chat.env 回退 → 回退文件被优先找到
+    # test-chatedit 无 CWD 同名文件，但 .chatedit/test-chatedit.env 存在
+    # 搜索顺序：prog_name 所有目录优先于 ai-chat 回退，故找到 .chatedit/test-chatedit.env
     {
         no warnings 'once';
         $main::prog_name = 'test-chatedit';
-        $main::opt_env   = undef;
     }
 
     $found = find_env_file();
-    is($found, './ai-chat.env', 'testdata: ai-chat.env fallback found before .chatedit subdir');
+    is($found, './.chatedit/test-chatedit.env',
+        'testdata: .chatedit/prog_name.env found before ai-chat.env fallback');
 
     chdir($orig_dir) or die;
     {

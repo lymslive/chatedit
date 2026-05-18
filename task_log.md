@@ -715,3 +715,68 @@ kimi-chat -i chat.md
 
 `prove perl/t/` — 全部 176 个测试通过，无回归。
 
+### COMMIT: d94b4ea98b411d09b736df7e6a3eb15a809c5bdb
+
+## TASK:20260518-151541
+-----------------------
+
+- 关联需求：TODO:2026-05-18/1 — ai-chat.pl 查找配置文件及读取全文件优化
+- 执行工具：claude-code (claude-sonnet-4-6)
+
+### 变更内容
+
+**`perl/ai-chat.pl`** — 配置文件查找逻辑重构 + 工具函数提取
+
+**`find_config_file` 修正**：
+- 参数由 `($suffix, $opt_val)` 改为仅 `($suffix)`，调用方负责在有命令行选项时跳过此函数
+- 修正搜索顺序：先遍历 `prog_name` 的全部目录（`./` → `.chatedit/` → `~/.chatedit/`），
+  再遍历 ai-chat 回退名的全部目录，消除了旧代码中目录与名称交叉的排序问题
+- 找到文件时打印 `[debug]` 调试信息
+
+**`load_env` 重构**：
+- `$opt_env` 有值时直接处理，不再调用 `find_env_file()`
+  - 空串或 `0` → 抑止查找，`[debug]` 提示
+  - 文件不存在 → `warn` 警告
+  - 文件存在 → 加载
+- `$opt_env = undef` 时才调用 `find_env_file()` 自动搜索
+
+**`load_template` 同步重构**：
+- `$opt_template` 有值时直接处理（同 `load_env` 逻辑），不再传入 `find_config_file`
+- 改用 `read_file_content()` 读取模板文件
+
+**`inject_system` 改进**：
+- `$opt_system` 为 `'0'`（同空串）时抑止 system 注入
+- 改用 `read_file_content()` 读取 sys 文件（替代内联 `local $/; <$fh>; chomp`）
+
+**新增 `read_file_content($file)`**：
+- 统一封装读取整个文件的逻辑，去除首尾空白后返回字符串
+- 供 `inject_system`、`load_template` 调用，消除重复模式
+
+**`decode_to_md` 合并简化**：
+- 合并原 `open_file_or_stdin` 逻辑：直接在函数内处理 `@ARGV` 或 STDIN
+- 函数改为无参数调用，`run()` 中只需 `decode_to_md(); exit 0`
+- 删除 `open_file_or_stdin` 独立函数
+
+**`--decode` 提前**：
+- 在 `run()` 中将 `--decode` 分支移至 `load_env()` 之前，decode 模式不需加载 env
+
+**薄封装更新**：
+- `find_env_file`/`find_system_file`/`find_template_file` 改为单纯调用 `find_config_file($suffix)`
+
+---
+
+**`perl/t/08-find-env.t` → `perl/t/08-find-config.t`**（重命名并重写）：
+- 新增 `load_env` 选项行为测试：显式文件加载、文件不存在警告、空串抑止
+- 修正 test-12：新搜索顺序下 `.chatedit/test-chatedit.env` 优先于 `./ai-chat.env`
+- 新增 `find_system_file` 与 `find_template_file` 的基本搜索测试
+
+**`perl/t/10-fix-level.t` → `perl/t/10-reformat.t`**（重命名，内容不变）
+
+**`perl/t/04-decode-to-md.t`**：
+- `capture_decode` 改为重定向 STDIN（而非传 filehandle 参数），适配新 `decode_to_md()` 接口
+
+**`CLAUDE.md`**：更新测试文件表格（文件名与描述）
+
+### 测试验证
+
+`prove perl/t/` — 全部 180 个测试通过，无回归（新增 4 个）。

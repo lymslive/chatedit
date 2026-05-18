@@ -12,7 +12,6 @@ require "$Bin/../ai-chat.pl";
 # 但保险起见仍禁用全局选项以免影响后续流程）
 {
     no warnings 'once';
-    $main::opt_system_given = 1;
     $main::opt_system       = '';
 }
 

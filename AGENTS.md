@@ -153,9 +153,9 @@ Test files:
 | `05-mock-api.t` | full pipeline with mock `call_api` (no real API calls needed) |
 | `06-encode-decode-roundtrip.t` | subprocess integration; encode↔decode idempotency over 2 iterations |
 | `07-simple-json-postdir.t` | `--simple`, `--json`, `--postdir` options |
-| `08-find-env.t` | `find_env_file` — config file search order |
+| `08-find-config.t` | `find_config_file` / `load_env` — search order (prog_name dirs first, then ai-chat fallback), `--env`/`--template` option handling |
 | `09-stream.t` | `_extract_stream_delta` (OpenAI/Anthropic SSE); `--stream --encode` sets `stream:true` |
-| `10-fix-level.t` | `fix_heading_level` transformation (incl. count return); `--reformat` default per output path (file=1, stdout=0); `print_response` with `$for_file` flag |
+| `10-reformat.t` | `fix_heading_level` transformation (incl. count return); `--reformat` default per output path (file=1, stdout=0); `print_response` with `$for_file` flag |
 
 **Mocking `call_api`**: override the sub via Perl's symbol table — no extra modules needed:
 ```perl

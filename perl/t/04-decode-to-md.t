@@ -8,17 +8,14 @@ use JSON::PP;
 
 require "$Bin/../ai-chat.pl";
 
-# 辅助：捕获 decode_to_md 输出到字符串
+# 辅助：捕获 decode_to_md 输出到字符串（重定向 STDIN，不传参数）
 sub capture_decode {
     my ($json_str) = @_;
-    # decode_to_md 期望原始字节，使用 :raw 打开字符串引用
-    open my $fh, '<:raw', \$json_str or die "Cannot open string ref: $!";
     my $output = '';
-    {
-        open( local *STDOUT, '>', \$output ) or die "Cannot redirect STDOUT: $!";
-        decode_to_md($fh);
-    }
-    close $fh;
+    local @ARGV = ();
+    open(local *STDIN,  '<:raw', \$json_str) or die "Cannot redirect STDIN: $!";
+    open(local *STDOUT, '>',     \$output)   or die "Cannot redirect STDOUT: $!";
+    decode_to_md();
     return $output;
 }
 
