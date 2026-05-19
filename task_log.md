@@ -828,3 +828,47 @@ kimi-chat -i chat.md
 
 `prove perl/t/` — 全部 180 个测试通过，无回归。
 
+
+### COMMIT: 4ab2311325c0b6cb2a385b9161c61ea28c9d627d
+
+## TASK:20260519-150223
+-----------------------
+
+- 关联需求：TODO:2026-05-19/2 — ai-chat.pl 补充单元测试覆盖
+- 执行工具：claude-code (claude-sonnet-4-6)
+
+根据 `doing_plan.tmp/code-review-perl.md` 审核报告中的"四、测试覆盖缺口"章节，
+对高/中风险的未覆盖路径新增单元测试。
+
+### 变更内容
+
+**新增 `perl/t/11-inject-system.t`**（inject_system 独立单元测试）：
+- 场景 1：`$opt_system` 为直接字符串 → 注入为第一条 system 消息
+- 场景 2：`$opt_system` 为 `@filepath` 引用 → 读取文件内容注入
+- 场景 3/4：`$opt_system` 为 `''` / `'0'` → 抑止，不插入
+- 场景 5：`$opt_system = undef` + `find_system_file` 返回 undef → 不插入
+- 场景 6：`$opt_system = undef` + `find_system_file` 返回文件 → 读文件注入
+- 场景 7：消息列表首条已是 system → 不重复插入
+
+**新增 `perl/t/12-stdin-append.t`**（open_stdin + --append stdout 复制行为）：
+- 场景 1：无 `--append`，STDIN 写入临时文件，stdout 无输出
+- 场景 2：带 `--append`，STDIN 写入临时文件，并同步复制到 stdout
+- 场景 3：STDIN 末尾无 `\n` 时，stdout 末尾自动补 `\n`
+
+**扩展 `perl/t/05-mock-api.t`**（run_non_stream 完整流程）：
+- 无 `--append`：mock call_api，验证响应打印到 stdout
+- 带 `--append` + 临时文件：验证角色标题和内容追加到文件，stderr 打印摘要行
+
+**扩展 `perl/t/10-reformat.t`**（append_to_file 末尾换行补充逻辑）：
+- 文件末尾为非空行 → 追加前自动插入空行分隔
+- 文件末尾已有空行 → 不重复补行
+
+**更新 `CLAUDE.md`**：
+- `05-mock-api.t` 描述补充 run_non_stream 测试
+- `10-reformat.t` 描述补充末尾换行测试
+- 新增 `11-inject-system.t` / `12-stdin-append.t` 表格行
+
+### 测试验证
+
+`prove perl/t/` — 全部 211 个测试通过（新增 31 个测试用例），无回归。
+

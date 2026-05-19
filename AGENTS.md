@@ -150,12 +150,14 @@ Test files:
 | `02-parse-chat.t` | `parse_chat` — roles, comments, code blocks, `@file`, `!cmd` |
 | `03-parse-response.t` | `parse_response` — OpenAI / Anthropic / error / Unicode formats |
 | `04-decode-to-md.t` | `decode_to_md` — JSON → Markdown output |
-| `05-mock-api.t` | full pipeline with mock `call_api` (no real API calls needed) |
+| `05-mock-api.t` | full pipeline with mock `call_api`; `run_non_stream` complete flow incl. file append |
 | `06-encode-decode-roundtrip.t` | subprocess integration; encode↔decode idempotency over 2 iterations |
 | `07-simple-json-postdir.t` | `--simple`, `--json`, `--postdir` options |
 | `08-find-config.t` | `find_config_file` / `load_env` — search order (prog_name dirs first, then ai-chat fallback), `--env`/`--template` option handling |
 | `09-stream.t` | `_extract_stream_delta` (OpenAI/Anthropic SSE); `--stream --encode` sets `stream:true` |
-| `10-reformat.t` | `fix_heading_level` transformation (incl. count return); `--reformat` default per output path (file=1, stdout=0); `print_response` with `$for_file` flag |
+| `10-reformat.t` | `fix_heading_level` transformation (incl. count return); `--reformat` default per output path (file=1, stdout=0); `print_response` with `$for_file` flag; `append_to_file` trailing-newline separator logic |
+| `11-inject-system.t` | `inject_system` — direct value, `@file` ref, suppress (`''`/`'0'`), undef+auto-search via `find_system_file`, no-duplicate when system already present |
+| `12-stdin-append.t` | `open_stdin` — STDIN buffered to tmp file; `--append` copies STDIN to stdout; trailing-newline supplement |
 
 **Mocking `call_api`**: override the sub via Perl's symbol table — no extra modules needed:
 ```perl

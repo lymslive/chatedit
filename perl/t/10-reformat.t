@@ -197,4 +197,52 @@ is(fix_heading_level("    缩进行"),   "    缩进行",     '缩进行不变')
     unlike($output, qr/## assistant >>/, 'print_response(0): 无标题行');
 }
 
+# ============================================================================
+# append_to_file：末尾换行补充逻辑
+# ============================================================================
+
+# 文件末尾是非空行（无尾随空行）→ 追加前自动补一个空行分隔
+{
+    no warnings 'once';
+    $main::opt_reformat = undef;
+}
+{
+    my ($tmp_fh, $tmp_file) = tempfile(SUFFIX => '.md', UNLINK => 1);
+    # 文件末尾写非空内容行（以 \n 结尾但无额外空行）
+    print $tmp_fh "## user >>\n\ncontent-line\n";
+    close $tmp_fh;
+
+    append_to_file($tmp_file, 'assistant', "reply");
+
+    open my $rfh, '<:utf8', $tmp_file or die $!;
+    local $/;
+    my $written = <$rfh>;
+    close $rfh;
+
+    # 追加部分应以 \n\n 与原有内容分隔（原末尾 \n + 补充的 \n）
+    like($written, qr/content-line\n\n/, 'append_to_file: 末尾非空行时自动补空行分隔');
+}
+
+# 文件末尾已有空白行 → 不重复补空行
+{
+    no warnings 'once';
+    $main::opt_reformat = undef;
+}
+{
+    my ($tmp_fh, $tmp_file) = tempfile(SUFFIX => '.md', UNLINK => 1);
+    # 文件末尾有空行（内容行 + 空行）
+    print $tmp_fh "## user >>\n\ncontent-line\n\n";
+    close $tmp_fh;
+
+    append_to_file($tmp_file, 'assistant', "reply");
+
+    open my $rfh, '<:utf8', $tmp_file or die $!;
+    local $/;
+    my $written = <$rfh>;
+    close $rfh;
+
+    # 不应出现三个连续换行（说明没有重复补空行）
+    unlike($written, qr/content-line\n\n\n/, 'append_to_file: 末尾已有空行时不重复补行');
+}
+
 done_testing();

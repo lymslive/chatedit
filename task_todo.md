@@ -460,6 +460,15 @@ review 报告见 `doing_plan.tmp/code-review-perl.md` 。
 
 ### DONE: 20260519-143141
 
+## TODO:2026-05-19/2 ai-chat.pl 补充单元测试覆盖
+
+参考 review 报告 `doing_plan.tmp/code-review-perl.md` 
+相关章节： `## 四、测试覆盖缺口`。
+
+用例优先按功能类别加在已有的 `*.t` 文件中，不好合并的才新建文件。
+
+### DONE: 20260519-150223
+
 ## TODO: 长期计划
 
 尝试用不同的语言实现基本的 AI 聊天功能。
