@@ -13,8 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `bash/ai-curl.sh` | Bash | Wraps `curl` to send a JSON payload to an AI API endpoint |
 | `perl/ai-chat.pl` | Perl | Parses Markdown chat files → assembles JSON → calls API via `curl` → writes response back |
 | `bin/ai-curl` | symlink | Points to `bash/ai-curl.sh` |
-| `vim/plugin/chatedit.vim` | Vimscript | Vim plugin — `:AI` / `:AR` commands call `ai-chat.pl` from inside Vim |
-| `vim/ftplugin/markdown.vim` | Vimscript | Markdown filetype abbreviations for chat role headings |
+| `vim/` (submodule) | Vimscript | Git submodule → `github.com/lymslive/chatedit-vim`; `:AI` / `:AR` commands + Markdown abbreviations |
 | `Makefile` | Make | `test` / `install` / `help` targets |
 
 The two scripts can be used independently or piped together:
@@ -181,15 +180,23 @@ bash/ai-curl.sh testdata/chat-simple.json
 
 ## Vim Plugin (`vim/`)
 
-Lives in `vim/` with standard Vim plugin directory layout:
-- `vim/plugin/chatedit.vim` — auto-loaded; defines `:AI` and `:AR` commands
-- `vim/ftplugin/markdown.vim` — insert-mode abbreviations for chat role headings
+`vim/` is a **git submodule** pointing to `https://github.com/lymslive/chatedit-vim`.
+After cloning this repo, initialise it with:
+```bash
+git submodule update --init
+```
 
-**Installing the plugin** (Vim 8+ native packages):
+Standard Vim plugin layout inside the submodule:
+- `plugin/chatedit.vim` — auto-loaded; defines `:AI` and `:AR` commands
+- `ftplugin/markdown.vim` — insert-mode abbreviations for chat role headings
+
+**Installing the plugin** (Vim 8+ native packages — either symlink or clone directly):
 ```bash
 mkdir -p ~/.vim/pack/chatedit/start
+# Option A: symlink from the checked-out submodule
 ln -s /path/to/chatedit/vim ~/.vim/pack/chatedit/start/chatedit
-# Or clone separately: git clone <chatedit-vim-repo> ~/.vim/pack/chatedit/start/chatedit
+# Option B: clone the plugin repo standalone
+git clone git@github.com:lymslive/chatedit-vim.git ~/.vim/pack/chatedit/start/chatedit
 ```
 
 **Commands** (requires `ai-chat.pl` on `$PATH`; override with `let g:chatedit_cmd = '...'`):

@@ -206,11 +206,21 @@ make install INSTALL_DIR=/usr/local/bin
 
 ## Vim 插件
 
-`vim/` 目录是一个标准 Vim 插件，可安装到 Vim 8+ 的 native packages：
+`vim/` 是一个 **git 子模块**，指向独立仓库 [lymslive/chatedit-vim](https://github.com/lymslive/chatedit-vim)。
+克隆本仓库后需执行以下命令初始化子模块：
+
+```bash
+git submodule update --init
+```
+
+可安装到 Vim 8+ 的 native packages（二选一）：
 
 ```bash
 mkdir -p ~/.vim/pack/chatedit/start
+# 方式 A：软链接到已初始化的子模块目录
 ln -s /path/to/chatedit/vim ~/.vim/pack/chatedit/start/chatedit
+# 方式 B：直接单独克隆插件仓库
+git clone git@github.com:lymslive/chatedit-vim.git ~/.vim/pack/chatedit/start/chatedit
 ```
 
 安装后在 vim 中编辑聊天文件时可用以下命令（需要 `ai-chat.pl` 在 `$PATH`）：
@@ -240,7 +250,7 @@ chatedit/
 │   └── ai-curl             # 软链接 → ../bash/ai-curl.sh
 ├── perl/
 │   └── ai-chat.pl          # Markdown 聊天文件转换与 API 调用脚本
-├── vim/
+├── vim/                    # git 子模块 → github.com/lymslive/chatedit-vim
 │   ├── plugin/
 │   │   └── chatedit.vim    # Vim 插件主体（:AI / :AR 命令）
 │   └── ftplugin/
@@ -278,7 +288,7 @@ chatedit/
 |------|------|
 | 已完成 | Bash curl 封装（`bash/ai-curl.sh`） |
 | 进行中 | Perl 实现（`perl/ai-chat.pl`） |
-| 进行中 | Vim 插件集成（`vim/` 目录） |
+| 已完成 | Vim 插件集成（`vim/` 子模块） |
 | 计划中 | Python / Node.js 实现 |
 | 计划中 | 编译型实现（C++ / Rust / Go） |
 | 计划中 | Web 浏览器前端页面 |
