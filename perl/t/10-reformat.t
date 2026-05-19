@@ -8,11 +8,10 @@ use File::Temp qw(tempfile);
 
 require "$Bin/../ai-chat.pl";
 
-# 抑止 system 文件自动查找
+# 抑止 system 文件自动查找（opt_system = '' 表示已指定，不再自动搜索）
 {
     no warnings 'once';
-    $main::opt_system_given = 1;
-    $main::opt_system       = '';
+    $main::opt_system = '';
 }
 
 # ============================================================================

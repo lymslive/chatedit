@@ -105,8 +105,8 @@ sub run_script {
         local $/; my $content = <$fh>; close $fh;
         is($content, $json_str, 'save_to_postdir: file content matches');
 
-        # 文件名格式：test-ai-yyyymmdd-hhmmss.json
-        like($files[0], qr{test-ai-\d{8}-\d{6}\.json$}, 'save_to_postdir: filename has timestamp format');
+        # 文件名格式：test-ai-yyyymmdd-hhmmss-PID.json
+        like($files[0], qr{test-ai-\d{8}-\d{6}-\d+\.json$}, 'save_to_postdir: filename has timestamp format');
     }
 
     # 恢复 prog_name
@@ -143,7 +143,7 @@ sub run_script {
 
     my @files = glob("$tmpdir/kimi-chat-*.json");
     is(scalar @files, 1, 'save_to_postdir: prog_name used in filename');
-    like($files[0], qr{kimi-chat-\d{8}-\d{6}\.json$}, 'save_to_postdir: custom prog_name in filename');
+    like($files[0], qr{kimi-chat-\d{8}-\d{6}-\d+\.json$}, 'save_to_postdir: custom prog_name in filename');
 
     {
         no warnings 'once';

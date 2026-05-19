@@ -780,3 +780,51 @@ kimi-chat -i chat.md
 ### 测试验证
 
 `prove perl/t/` — 全部 180 个测试通过，无回归（新增 4 个）。
+
+### COMMIT: 45220c77ed70f77a645d9a1398c89fcae868dc61
+
+## TASK:20260519-143141
+-----------------------
+
+- 关联需求：TODO:2026-05-19/1 — ai-chat.pl 代码 review 及优化
+- 执行工具：claude-code (claude-sonnet-4-6)
+
+按 `doing_plan.tmp/code-review-perl.md` 审核报告，修复 P1/P2 级别的 Bug 与代码质量问题。
+
+### 变更内容
+
+**`perl/ai-chat.pl`**
+
+**B2 修复**（流式角色标题硬编码）：
+- 删除 `run_stream` 中提前写死的 `print "## assistant >>\n\n" if $stdout_reformat`
+- `call_api_stream` 新增 `$print_header` 参数；在首个非空 delta 到达后、打印内容之前，
+  用实际角色名打印标题，与非流式 `print_response` 行为统一
+
+**B4 修复**（usage 笔误）：
+- `usage()` 及 POD 中 `--env` 说明从 `ai-curl.env` 改为 `ai-chat.env`
+
+**B1 修复 + C1 风格统一**（`fix_heading_level`）：
+- h1→h3 改为 `$line = '###' . substr($line, 1)`，与 h2+ 分支统一使用赋值方式
+- 增加 `$level < 6` 边界判断，h6 不再变成无效的 h7
+
+**B5 修复**（`append_to_file` 行数统计偏多）：
+- `split /\n/, $content, -1` 改为 `split /\n/, $content`（去掉 `-1`），
+  避免尾部空字符串被计入行数
+
+**Q1 修复**（`find_config_file` 中 `$ENV{HOME}` 未检查）：
+- 改为先构建 `['.', './.chatedit']`，再 `push` 时检查 `defined $ENV{HOME}`
+
+**Q2 修复**（`save_to_postdir` 文件名时间戳秒级冲突）：
+- 文件名加入进程 PID（`$$`），格式改为 `程序名-yyyymmdd-hhmmss-PID.json`
+- 同步更新 usage/POD 说明文字
+
+**`perl/t/07-simple-json-postdir.t`**：
+- 更新两处文件名正则 `\d{8}-\d{6}\.json$` → `\d{8}-\d{6}-\d+\.json$`
+
+**`perl/t/10-reformat.t`**：
+- 删除死代码 `$main::opt_system_given = 1`（该变量从未在主脚本中声明）
+
+### 测试验证
+
+`prove perl/t/` — 全部 180 个测试通过，无回归。
+
