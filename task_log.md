@@ -872,3 +872,51 @@ kimi-chat -i chat.md
 
 `prove perl/t/` — 全部 211 个测试通过（新增 31 个测试用例），无回归。
 
+
+### COMMIT: 407896ea537e9b0bb9520f265e99e2ed2bc6f048
+
+## TASK:20260519-202210
+-----------------------
+
+- 关联需求：TODO:2026-05-19/3 — 封装 vim 插件应用 ai-chat.pl 于当前编辑的聊天文件
+- 执行工具：claude-code (claude-sonnet-4-6)
+
+新建 vim 插件子目录，提供在 Vim 内调用 `ai-chat.pl` 的命令；并在项目根目录新增
+Makefile 方便安装脚本。
+
+### 变更内容
+
+**新增 `vim/plugin/chatedit.vim`**（Vim 插件主体）：
+- `:AI [range]` — 保存文件（或写临时文件），调用 `ai-chat.pl --reformat 1`，
+  将响应追加到 buffer 末尾；默认 range 为 `%`（全文件）
+- `:'<,'>AI` — 将选区写临时文件，调用同上，响应插入选区下方
+- `:AR [range]` — 与 `:AI` 类似，但加 `--simple`，响应替换原 range 内容
+- `:'<,'>AR` — 将选区写临时文件，调用 `--simple --reformat 1`，响应替换选区
+- 全局变量 `g:chatedit_cmd`（默认 `ai-chat.pl`）可覆盖命令路径
+
+**新增 `vim/ftplugin/markdown.vim`**（Markdown 文件类型插件）：
+- 插入模式缩写：`#s` → `## system >>`，`#u` → `## user >>`，`#a` → `## assistant >>`
+
+**新增 `Makefile`**（项目根目录）：
+- `make test` — 执行 `prove perl/t/`
+- `make install` — 用 `install -m 755` 将脚本安装到 `$HOME/bin`（可覆盖 `INSTALL_DIR`）
+- `make help` — 打印目标说明
+
+**更新 `AGENTS.md`**：
+- Tools 表格补充 vim plugin 和 Makefile 条目
+- 新增 "Vim Plugin" 和 "Makefile" 节
+
+**更新 `readme.md`**：
+- 新增"安装"和"Vim 插件"章节
+- 目录结构补充 `vim/` 子树和 `Makefile`
+- 长期计划中 Vim 插件集成改为"已完成"
+
+### 关键设计与权衡
+
+- 同步调用 `ai-chat.pl`（使用 `systemlist()`）：实现简单，兼容 Vim 7+；
+  在 AI 返回前 Vim 暂时不响应，后续可优化为异步方式
+- `:AI` 对有文件名的全文 buffer 直接 `:write` 后传路径，避免不必要的临时文件；
+  无文件名或选区时写临时文件，用后删除
+- `g:loaded_chatedit` 防重复加载；`b:did_chatedit_ftplugin` 防 ftplugin 重复执行
+- vim 子目录暂作普通目录提交，待用户建好 `chatedit-vim` GitHub 仓库后可改为子模块
+

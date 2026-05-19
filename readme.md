@@ -194,6 +194,42 @@ cat chat.md | perl/ai-chat.pl --encode | perl/ai-chat.pl --decode
 perl/ai-chat.pl --encode chat.md | jq .
 ```
 
+## 安装
+
+将 `ai-chat.pl` 和 `ai-curl.sh` 复制到 `$PATH`（默认安装到 `~/bin`）：
+
+```bash
+make install
+# 或指定目录
+make install INSTALL_DIR=/usr/local/bin
+```
+
+## Vim 插件
+
+`vim/` 目录是一个标准 Vim 插件，可安装到 Vim 8+ 的 native packages：
+
+```bash
+mkdir -p ~/.vim/pack/chatedit/start
+ln -s /path/to/chatedit/vim ~/.vim/pack/chatedit/start/chatedit
+```
+
+安装后在 vim 中编辑聊天文件时可用以下命令（需要 `ai-chat.pl` 在 `$PATH`）：
+
+| 命令 | 功能 |
+|------|------|
+| `:AI` | 调用 `ai-chat.pl`，将回复追加到文件末尾 |
+| `:'<,'>AI` | 将选区作为聊天输入，回复插入选区下方 |
+| `:AR` | 以 `--simple` 模式调用，回复替换当前文件内容 |
+| `:'<,'>AR` | 以 `--simple` 模式调用，回复替换选区内容 |
+
+`.md` 文件中的插入模式缩写（快速输入对话标题）：
+
+```
+#s  →  ## system >>
+#u  →  ## user >>
+#a  →  ## assistant >>
+```
+
 ## 目录结构
 
 ```
@@ -204,6 +240,11 @@ chatedit/
 │   └── ai-curl             # 软链接 → ../bash/ai-curl.sh
 ├── perl/
 │   └── ai-chat.pl          # Markdown 聊天文件转换与 API 调用脚本
+├── vim/
+│   ├── plugin/
+│   │   └── chatedit.vim    # Vim 插件主体（:AI / :AR 命令）
+│   └── ftplugin/
+│       └── markdown.vim    # Markdown 文件类型插件（对话标题缩写）
 ├── docs/
 │   └── chat-format.md      # Markdown 聊天文件格式规范
 ├── testdata/
@@ -212,6 +253,7 @@ chatedit/
 │   ├── chat-system.json    # 带 system prompt 的请求 JSON 示例
 │   ├── chat-hello.md       # 简单对话 Markdown 示例
 │   └── chat-system.md      # 带 system 消息的多轮对话示例
+├── Makefile                # test / install / help
 ├── ai-curl.env             # 本地 API 配置（不纳入版本控制）
 └── readme.md
 ```
@@ -236,7 +278,7 @@ chatedit/
 |------|------|
 | 已完成 | Bash curl 封装（`bash/ai-curl.sh`） |
 | 进行中 | Perl 实现（`perl/ai-chat.pl`） |
-| 计划中 | Vim 插件集成 |
+| 进行中 | Vim 插件集成（`vim/` 目录） |
 | 计划中 | Python / Node.js 实现 |
 | 计划中 | 编译型实现（C++ / Rust / Go） |
 | 计划中 | Web 浏览器前端页面 |

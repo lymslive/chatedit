@@ -13,6 +13,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `bash/ai-curl.sh` | Bash | Wraps `curl` to send a JSON payload to an AI API endpoint |
 | `perl/ai-chat.pl` | Perl | Parses Markdown chat files → assembles JSON → calls API via `curl` → writes response back |
 | `bin/ai-curl` | symlink | Points to `bash/ai-curl.sh` |
+| `vim/plugin/chatedit.vim` | Vimscript | Vim plugin — `:AI` / `:AR` commands call `ai-chat.pl` from inside Vim |
+| `vim/ftplugin/markdown.vim` | Vimscript | Markdown filetype abbreviations for chat role headings |
+| `Makefile` | Make | `test` / `install` / `help` targets |
 
 The two scripts can be used independently or piped together:
 ```bash
@@ -174,6 +177,43 @@ perl/ai-chat.pl --encode testdata/chat-system.md | jq .
 
 # Test ai-curl.sh with a static JSON file (requires valid ai-curl.env)
 bash/ai-curl.sh testdata/chat-simple.json
+```
+
+## Vim Plugin (`vim/`)
+
+Lives in `vim/` with standard Vim plugin directory layout:
+- `vim/plugin/chatedit.vim` — auto-loaded; defines `:AI` and `:AR` commands
+- `vim/ftplugin/markdown.vim` — insert-mode abbreviations for chat role headings
+
+**Installing the plugin** (Vim 8+ native packages):
+```bash
+mkdir -p ~/.vim/pack/chatedit/start
+ln -s /path/to/chatedit/vim ~/.vim/pack/chatedit/start/chatedit
+# Or clone separately: git clone <chatedit-vim-repo> ~/.vim/pack/chatedit/start/chatedit
+```
+
+**Commands** (requires `ai-chat.pl` on `$PATH`; override with `let g:chatedit_cmd = '...'`):
+
+| Command | Behavior |
+|---------|----------|
+| `:AI` | Save buffer → run `ai-chat.pl --reformat 1` → append response to end of buffer |
+| `:'<,'>AI` | Write selection to temp file → run `ai-chat.pl --reformat 1` → insert response after selection |
+| `:AR` | Save buffer → run `ai-chat.pl --simple --reformat 1` → replace buffer with response |
+| `:'<,'>AR` | Write selection to temp file → run `ai-chat.pl --simple --reformat 1` → replace selection |
+
+**Markdown abbreviations** (insert mode, in `.md` files):
+```
+#s  →  ## system >>
+#u  →  ## user >>
+#a  →  ## assistant >>
+```
+
+## Makefile
+
+```bash
+make help     # list targets
+make test     # run prove perl/t/
+make install  # copy ai-chat.pl + ai-curl.sh to ~/bin  (override: make install INSTALL_DIR=/usr/local/bin)
 ```
 
 ## Task/Log Files

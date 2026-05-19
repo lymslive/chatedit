@@ -469,13 +469,58 @@ review 报告见 `doing_plan.tmp/code-review-perl.md` 。
 
 ### DONE: 20260519-150223
 
+## TODO:2026-05-19/3 封装 vim 插件应用 ai-chat.pl 于当前编辑的聊天文件
+
+新建 vim/ 子目录，作为一个 git 子模块。
+按标准 vim 插件组织其目录结构，允许用户单独 git clone 该子模块仓库至
+~/.vim/pack/start (或 opt) 成为 vim 插件。
+
+vim 插件单独仓库名打算在 github 上命名为 `chatedit-vim`，但嵌在这个主仓库时，
+位于 `vim/` 子目录，也相当语言名称。未预建 `chatedit-vim` 仓库，能直接从 `vim/`
+子目录新建仓库吗？
+
+### vim 插件功能
+
+自定义命令：
+- `:AI` ，将当前编辑文件(buffer) ，用 `:!ai-chat.pl --reformat` ，捕获 stdout
+  ，添加到 buffer 末尾。由于在 vim 中编辑，不要加 `--append` 参数，由用户在
+  vim 中再决定保存修改的文件。但调用 `ai-chat.pl` 前先保存文件，除非 buffer
+  还没关联文件名，那就先将 buffer 写入临时文件。即使能将 buffer 通过 stdin 传
+  给 `ai-chat.pl` ，后者的实现也需要保存临时文件，不如统一先存盘。
+- `:'<,>'AI` ，将当前选区保存临时文件，调用 `ai-chat.pl --reformat` ，捕获输出
+  插到选区下面。`:AI` 的效果相当于 `:%AI` ，但在有文件名时不必另存临时文件。
+- `:AR` 与 `:'<,>'AR`，调用 `ai-chat.pl --simple` 模式，并将输出替换当前文件或
+  选区内容。
+
+先为简单实现起见，用同步方式调用 `ai-chat.pl` 。这样在 vim7 以下老版本也能使用，
+只是在 AI 返回之前可能 vim 无法使用，要卡一会。后面再优化为异常方式。
+
+文件类型插件 ftplugin/markdown.vim 增加几个插入模式下的快捷缩写：
+- `#s` 能展开为 `## system >>`
+- `#u` 能展开为 `## user >>`
+- `#a` 能展开为 `## assistant >>`
+
+这用于快捷输出特殊的对话标题。
+
+### 安装 ai-chat.pl
+
+为了能在 vim 中方便调用 `ai-chat.pl` ，最好安装到 `$PATH` 中。
+
+项目根目录写个简单 makefile ，支持一些伪目标：
+
+- `make test`: 执行 prove 做单元测试
+- `make install`: 将 `ai-chat.pl` 与 `ai-curl.sh` 拷到 `$HOME/bin/` 目录
+- `make help`: 打印可选目标及功能用法
+
+### DONE: 20260519-202210
+
 ## TODO: 长期计划
 
 尝试用不同的语言实现基本的 AI 聊天功能。
 
 - [Y] bash 基本 curl 请求封装
 - [Z] perl 实现
-- [O] vim 插件集成
+- [Z] vim 插件集成
 - [O] 其他脚本实现如 python node
 - [O] 编译型实现，供预编译可执行程序，如 cpp rust go
 - [O] web 浏览器独立前端页面实现
