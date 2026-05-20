@@ -620,16 +620,10 @@ sub append_to_file
         ($content, $reformed_count) = fix_heading_level($content);
     }
 
-    open my $rfh, '<:utf8', $file
-        or die "错误: 无法读取文件 '$file': $!\n";
-    my $last_line = '';
-    while (<$rfh>) { $last_line = $_ }
-    close $rfh;
-
     open my $wfh, '>>:utf8', $file
         or die "错误: 无法写入文件 '$file': $!\n";
 
-    print $wfh "\n" if $last_line !~ /^\s*$/;
+    print $wfh "\n";
 
     my $lines_appended = 0;
     if ($do_fmt) {

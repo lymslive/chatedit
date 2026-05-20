@@ -920,3 +920,46 @@ Makefile 方便安装脚本。
 - `g:loaded_chatedit` 防重复加载；`b:did_chatedit_ftplugin` 防 ftplugin 重复执行
 - vim 子目录暂作普通目录提交，待用户建好 `chatedit-vim` GitHub 仓库后可改为子模块
 
+### COMMIT: e4c5dc4b1866c333bf6df5b697c5caf0be6fef41
+### COMMIT: 66ca886d4b06d8874cd96001c9d5ec0983f9f21e
+
+## TASK:20260520-091327
+-----------------------
+
+- 关联需求：TODO:2026-05-20/1 — vim 插件捕获标准错误 + append_to_file 简化
+- 执行工具：claude-code (claude-sonnet-4-6)
+
+修复 vim 插件错误输出展示问题，并简化 `append_to_file` 的末尾换行逻辑。
+
+### 变更内容
+
+**`vim/plugin/chatedit.vim`**：
+- `systemlist(l:cmd)` → `systemlist(l:cmd . ' 2>&1')`，同时捕获 stdout 与 stderr
+- 出错时（exit code != 0），除状态栏 `ErrorMsg` 外，将错误详情追加到 buffer 末尾；
+  用户可用 `u` 撤销，或自行删除错误行
+
+**`perl/ai-chat.pl`** (`append_to_file`)：
+- 移除读取文件逐行扫描的逻辑（只为判断末尾是否非空，性价比低）
+- 改为始终追加一个 `\n` 后再写 `## role >>` 标题，保证顶格写入
+- 用户在 vim 中可自行增删多余空行
+
+**`perl/t/10-reformat.t`**：
+- 更新 "末尾已有空行" 场景测试：由 `unlike` 改为 `like`，反映新的始终追加一个换行的简化行为
+
+### 关键设计与权衡
+
+- `2>&1` 合并：`ai-chat.pl` 正常路径（无 `--debug`、无 `-a`）不向 stderr 写任何内容，
+  故合并后成功调用时不影响输出；只有出错时 stderr 才有内容
+- 出错时始终追加到 buffer 末尾（而非替换），与 `:AR` 的替换逻辑解耦，用户可一键 `u` 撤销
+- `append_to_file` 简化后，若原文末尾已有空行则会出现双空行；TODO 明确说明由用户自行处理，属可接受行为
+
+### 测试验证
+
+`prove perl/t/` 全部通过（`08-find-config.t` 有一个预存在的环境相关失败，与本次无关）
+
+
+### 补充修复
+
+**`perl/t/08-find-config.t`**（测试 7）：
+- 补充 `local $ENV{HOME} = $tmpdir`，隔离真实 home 目录
+- 防止系统上实际存在的 `~/.chatedit/ai-chat.env` 被 fallback 搜索命中导致测试失败

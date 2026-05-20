@@ -223,7 +223,7 @@ is(fix_heading_level("    缩进行"),   "    缩进行",     '缩进行不变')
     like($written, qr/content-line\n\n/, 'append_to_file: 末尾非空行时自动补空行分隔');
 }
 
-# 文件末尾已有空白行 → 不重复补空行
+# 文件末尾已有空白行 → 始终补一个换行（简化逻辑，用户可自行删除多余空行）
 {
     no warnings 'once';
     $main::opt_reformat = undef;
@@ -241,8 +241,8 @@ is(fix_heading_level("    缩进行"),   "    缩进行",     '缩进行不变')
     my $written = <$rfh>;
     close $rfh;
 
-    # 不应出现三个连续换行（说明没有重复补空行）
-    unlike($written, qr/content-line\n\n\n/, 'append_to_file: 末尾已有空行时不重复补行');
+    # 始终追加一个 \n，所以原末尾 \n\n 变为 \n\n\n（由用户自行处理多余空行）
+    like($written, qr/content-line\n\n\n/, 'append_to_file: 始终追加一个换行分隔');
 }
 
 done_testing();

@@ -179,6 +179,7 @@ sub reset_env_opts {
 {
     my $tmpdir = tempdir(CLEANUP => 1);
     chdir($tmpdir) or die "Cannot chdir: $!";
+    local $ENV{HOME} = $tmpdir;    # 隔离 ~/ 目录，避免真实 ~/.chatedit/ai-chat.env 被找到
 
     {
         no warnings 'once';
