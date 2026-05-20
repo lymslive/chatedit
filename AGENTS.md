@@ -187,8 +187,9 @@ git submodule update --init
 ```
 
 Standard Vim plugin layout inside the submodule:
-- `plugin/chatedit.vim` — auto-loaded; defines `:AI` and `:AR` commands
-- `ftplugin/markdown.vim` — insert-mode abbreviations for chat role headings
+- `plugin/chatedit.vim` — auto-loaded; defines `:AI` and `:AR` commands (async on Vim8+, sync fallback on Vim7)
+- `autoload/chatedit.vim` — async implementation (`chatedit#RunChat`, `chatedit#HeadingIndent`); requires Vim 8 with `+job`
+- `ftplugin/markdown.vim` — insert-mode abbreviations + normal-mode heading-indent mappings
 
 **Installing the plugin** (Vim 8+ native packages — either symlink or clone directly):
 ```bash
@@ -201,12 +202,15 @@ git clone git@github.com:lymslive/chatedit-vim.git ~/.vim/pack/chatedit/start/ch
 
 **Commands** (requires `ai-chat.pl` on `$PATH`; override with `let g:chatedit_cmd = '...'`):
 
+Vim 8+ with `+job`: commands run **asynchronously** via `job_start()` + `--stream`; buffer updates stream in real time.
+Vim 7 / no `+job`: synchronous fallback (blocks until `ai-chat.pl` returns).
+
 | Command | Behavior |
 |---------|----------|
-| `:AI` | Save buffer → run `ai-chat.pl --reformat 1` → append response to end of buffer |
-| `:'<,'>AI` | Write selection to temp file → run `ai-chat.pl --reformat 1` → insert response after selection |
-| `:AR` | Save buffer → run `ai-chat.pl --simple --reformat 1` → replace buffer with response |
-| `:'<,'>AR` | Write selection to temp file → run `ai-chat.pl --simple --reformat 1` → replace selection |
+| `:AI` | Save buffer → run `ai-chat.pl --stream --reformat 1` → stream response to end of buffer |
+| `:'<,'>AI` | Write selection to temp file → run `ai-chat.pl --stream --reformat 1` → stream response after selection |
+| `:AR` | Save buffer → run `ai-chat.pl --simple --stream --reformat 1` → replace buffer with streamed response |
+| `:'<,'>AR` | Write selection to temp file → run with `--simple --stream --reformat 1` → replace selection |
 
 **Markdown abbreviations** (insert mode, in `.md` files):
 ```
@@ -214,6 +218,13 @@ git clone git@github.com:lymslive/chatedit-vim.git ~/.vim/pack/chatedit/start/ch
 #u  →  ## user >>
 #a  →  ## assistant >>
 ```
+
+**Normal-mode mappings** (`.md` files, heading lines only):
+```
+>>  →  increase heading level (add one #, max ######)
+<<  →  decrease heading level (remove one #, min #)
+```
+Non-heading lines fall through to the default `>>` (indent) / `<<` (unindent) behaviour.
 
 ## Makefile
 

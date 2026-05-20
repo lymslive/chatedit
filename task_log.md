@@ -963,3 +963,55 @@ Makefile 方便安装脚本。
 **`perl/t/08-find-config.t`**（测试 7）：
 - 补充 `local $ENV{HOME} = $tmpdir`，隔离真实 home 目录
 - 防止系统上实际存在的 `~/.chatedit/ai-chat.env` 被 fallback 搜索命中导致测试失败
+
+### COMMIT: 0add8d4279ef4457f98fd2a3d0e20943a08639f6
+
+## TASK:20260520-144608
+-----------------------
+
+**需求**：TODO:2026-05-20/2 vim 插件异步调用 ai-chat.pl
+
+### 实施内容
+
+**`vim/` 子仓库**（对应 `chatedit-vim`）：
+
+**前置操作**：
+- 将原同步版 `plugin/chatedit.vim` 提交为兼容基线 (`fec824f`)
+- 新建 `for-vim7` 分支保存该状态，主分支继续开发
+
+**`vim/autoload/chatedit.vim`**（新建）：
+- `chatedit#RunChat(line1, line2, mode)` -- 使用 `job_start()` + `--stream --reformat 1` 异步调用 `ai-chat.pl`
+  - `s:OnOut` 回调逐行 `appendbufline` 写入目标 buffer，实现实时流式显示
+  - `s:OnErr` 收集 stderr 行
+  - `s:OnExit` 处理退出：清理临时文件、出错报告、buffer 被删/用户移窗口时的友好提示
+- `chatedit#HeadingIndent(direction)` -- 增减当前行标题级别（`#` 数量），非标题行还原默认行为
+
+**`vim/plugin/chatedit.vim`**（更新）：
+- 保留原同步 `s:RunChat` 作 Vim7 / 无 `+job` 的降级路径
+- `has('job')` 时命令改为调用 `chatedit#RunChat`
+
+**`vim/ftplugin/markdown.vim`**（更新）：
+- 添加普通模式快捷键 `>>` / `<<` 调用 `chatedit#HeadingIndent`
+- 标题行：增减 `#` 级别（最小 1，最大 6）
+- 非标题行：feedkeys 还原默认缩进行为
+
+**`vim/readme.md`**（新建）：
+- 插件功能、安装、命令、快捷键、异步边界情况一览
+
+### 设计要点
+
+异步边界情况处理策略（`s:OnExit`）：
+| 情况 | 处理 |
+|------|------|
+| 仍在同一 buffer | 内容已实时流入，无需额外通知 |
+| 移至其他窗口/tab | `echomsg` 提示完成+buffer 名 |
+| buffer 被隐藏 | 写入隐藏 buffer + 提示 |
+| buffer 被删除 | 警告，流式内容已丢失 |
+| 非零退出 | 错误提示 + stderr 追加到 buffer |
+
+Vim8 `out_mode` 默认 `'nl'`：按换行分批调用回调，保证每次 `appendbufline` 写入完整一行。
+
+### 子仓库提交
+
+vim/ 内提交：`db552c1`
+
