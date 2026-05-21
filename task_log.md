@@ -1134,3 +1134,12 @@ print STDOUT scalar fix_heading_level($delta_text);
 
 `prove perl/t/` 全部通过（211 tests，12 files）
 
+### 后续补充（同一需求）
+
+用户发现 `fix_heading_level` 正则 `/^(#+) /` 要求空格，但流式 delta 可能
+仅输出 `##` 片段（无空格）导致标题未被修正。手动修改如下：
+
+- 正则改为 `/^(#+)/`，不再要求空格后缀
+- level 1 替换从 `'###' . substr($line, 1)` 改为 `'##' . $line`（等效且风格一致）
+- 同步更新 `perl/t/10-reformat.t`：`#无空格`/`##无空格` 现视为标题，期望值改为 `###标签`
+

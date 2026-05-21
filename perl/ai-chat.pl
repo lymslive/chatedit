@@ -620,7 +620,7 @@ sub fix_heading_level
         $count++;
         my $level = length($1);
         if ($level == 1) {
-            $line = '##' . $line;  # # → ### (替换首个 #)
+            $line = '##' . $line;  # # → ### (前置两个 #)
         }
         elsif ($level < 6) {
             $line = '#' . $line;   # h2→h3, ..., h5→h6

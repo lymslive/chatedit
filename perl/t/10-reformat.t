@@ -32,9 +32,9 @@ is(fix_heading_level("### 三级"),     "#### 三级",      'h3 → h4');
 # h4 → h5
 is(fix_heading_level("#### 四级"),    "##### 四级",     'h4 → h5');
 
-# 非标题行（无空格）不受影响
-is(fix_heading_level("#标签"),        "#标签",          '#无空格不视为标题');
-is(fix_heading_level("##标签"),       "##标签",         '##无空格不视为标题');
+# 无空格的 # 也视为标题（流式 delta 可能只输出 ## 等片段）
+is(fix_heading_level("#标签"),        "###标签",        '#无空格也视为标题');
+is(fix_heading_level("##标签"),       "###标签",        '##无空格也视为标题');
 
 # 普通正文不受影响
 is(fix_heading_level("普通文字"),     "普通文字",       '普通行不变');
