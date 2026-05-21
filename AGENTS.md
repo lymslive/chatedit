@@ -122,7 +122,7 @@ The main flow inside `run()`:
 11. Dispatch to `run_stream()` or `run_non_stream()`:
     - **Phase 1**: always print response to stdout (`--reformat` defaults to 0 for stdout, or 1 when stdin+`-a`)
     - **Phase 2**: if `-a` + actual file, call `append_to_file()` (reformat defaults to 1) and print stderr summary line
-    - Streaming (`call_api_stream()`): real-time delta output; accumulates full content for Phase 2
+    - Streaming (`call_api_stream()` → `_process_stream_lines()`): real-time delta output; accumulates full content for Phase 2
     - Non-streaming (`call_api()` → `parse_response()`): handles OpenAI-compatible (`.choices[].message.content`) and Anthropic native (`.content[].text`) formats
 
 ## Dependencies
@@ -160,6 +160,7 @@ Test files:
 | `10-reformat.t` | `fix_heading_level` transformation (incl. count return); `--reformat` default per output path (file=1, stdout=0); `print_response` with `$for_file` flag; `append_to_file` trailing-newline separator logic |
 | `11-inject-system.t` | `inject_system` — direct value, `@file` ref, suppress (`''`/`'0'`), undef+auto-search via `find_system_file`, no-duplicate when system already present |
 | `12-stdin-append.t` | `open_stdin` — STDIN buffered to tmp file; `--append` copies STDIN to stdout; trailing-newline supplement |
+| `13-stream-process.t` | `_process_stream_lines` — SSE main loop: content accumulation, reformat (header + heading fix), mid-line heading edge case, Anthropic format, skip invalid input; reads `testdata/stream-openai.sse` and `testdata/stream-anthropic.sse` |
 
 **Mocking `call_api`**: override the sub via Perl's symbol table — no extra modules needed:
 ```perl

@@ -1143,3 +1143,45 @@ print STDOUT scalar fix_heading_level($delta_text);
 - level 1 替换从 `'###' . substr($line, 1)` 改为 `'##' . $line`（等效且风格一致）
 - 同步更新 `perl/t/10-reformat.t`：`#无空格`/`##无空格` 现视为标题，期望值改为 `###标签`
 
+### COMMIT: 161d91fa6d43a3c993398201e6c46a8fa7b34bfb
+
+
+## 20260521-153800
+
+需求：`2026-05-21/4` 【重构】优化流式响应处理函数
+
+### 实施内容
+
+从 `call_api_stream` 中将 `<$fh>` 主循环抽取为独立函数 `_process_stream_lines`，
+以便单元测试覆盖。
+
+**`perl/ai-chat.pl` 变更：**
+
+- 新增 `_process_stream_lines($fh, $reformat)` 函数（位于 `_extract_stream_delta` 之后）
+  - 接收文件句柄逐行读取 SSE 数据
+  - 负责原有的内容累积、stdout 实时输出、reformat 标题修正逻辑
+  - 返回 `($role, $content)`，其中 `$content` 保存原始未修正文本（供 `append_to_file` 使用）
+- `call_api_stream` 重构为只负责打开 curl 管道、处理 `--json` 透传模式、调用 `_process_stream_lines`、
+  检查 curl 退出码
+
+**新增测试数据文件：**
+
+- `testdata/stream-openai.sse`：精简的 OpenAI SSE 格式（含角色初始化 chunk、标题、结束 chunk）
+- `testdata/stream-anthropic.sse`：精简的 Anthropic 原生 SSE 格式（message_start / content_block_delta）
+
+**新增测试文件 `perl/t/13-stream-process.t`（26 个测试）：**
+
+- OpenAI 格式 reformat=0：原样输出，内容正确累积
+- OpenAI 格式 reformat=1：添加 `## role >>` 标题行，h2 → h3
+- 标题出现在行中间（prev_ends_nl=0）：换行后才修正，首段不修正
+- 标题出现在行首（prev_ends_nl=1）：直接修正
+- Anthropic 原生格式：role 从 message_start 提取
+- 非 data 行、空行、无效 JSON 均跳过
+- 空流（仅 [DONE]）：默认 role=assistant，content=''
+- 从 testdata/stream-openai.sse 读取验证
+- 从 testdata/stream-anthropic.sse 读取验证
+
+### 测试验证
+
+`prove perl/t/` 全部通过（239 tests，13 files）
+

@@ -491,12 +491,55 @@ sub call_api_stream
         return (undef, undef);
     }
 
+    my ($role, $content) = _process_stream_lines($resp_fh, $reformat);
+    close $resp_fh;
+    my $exit = $? >> 8;
+
+    die "错误: curl 命令失败 (exit: $exit)\n" if $exit != 0;
+
+    return ($role, $content);
+}
+
+# 从 SSE chunk 中提取 delta 文本，同时更新 $role（通过引用）
+sub _extract_stream_delta
+{
+    my ($chunk, $role_ref) = @_;
+
+    if (ref($chunk->{choices}) eq 'ARRAY' && @{ $chunk->{choices} }) {
+        my $delta = $chunk->{choices}[0]{delta} // {};
+        $$role_ref = $delta->{role}
+            if defined $delta->{role} && $delta->{role} ne '';
+        return $delta->{content} // '';
+    }
+
+    if (($chunk->{type} // '') eq 'content_block_delta') {
+        my $d = $chunk->{delta} // {};
+        return $d->{text} // ''
+            if ($d->{type} // '') eq 'text_delta';
+        return '';
+    }
+
+    if (($chunk->{type} // '') eq 'message_start') {
+        my $msg = $chunk->{message} // {};
+        $$role_ref = $msg->{role} if defined $msg->{role};
+    }
+
+    return '';
+}
+
+# 处理 SSE 流的核心循环
+# 参数: $fh（文件句柄，逐行读取 SSE 数据），$reformat（是否在 stdout 输出标题行并修正标题等级）
+# 返回: ($role, $content)；$content 始终保存原始未修正的文本，供 append_to_file() 使用
+sub _process_stream_lines
+{
+    my ($fh, $reformat) = @_;
+
     my $content      = '';
     my $role         = 'assistant';   # 默认值；实际角色从首个 chunk 中提取
     my $role_printed = 0;
     my $prev_ends_nl = 1;             # 上一个 delta 末尾是否换行（初始为1表示行首）
 
-    while (defined(my $line = <$resp_fh>)) {
+    while (defined(my $line = <$fh>)) {
         $line =~ s/\r?\n$//;
 
         next unless $line =~ /^data:\s*(.+)$/;
@@ -537,39 +580,8 @@ sub call_api_stream
             $prev_ends_nl = ($delta_text =~ /\n$/) ? 1 : 0;
         }
     }
-    close $resp_fh;
-    my $exit = $? >> 8;
-
-    die "错误: curl 命令失败 (exit: $exit)\n" if $exit != 0;
 
     return ($role, $content);
-}
-
-# 从 SSE chunk 中提取 delta 文本，同时更新 $role（通过引用）
-sub _extract_stream_delta
-{
-    my ($chunk, $role_ref) = @_;
-
-    if (ref($chunk->{choices}) eq 'ARRAY' && @{ $chunk->{choices} }) {
-        my $delta = $chunk->{choices}[0]{delta} // {};
-        $$role_ref = $delta->{role}
-            if defined $delta->{role} && $delta->{role} ne '';
-        return $delta->{content} // '';
-    }
-
-    if (($chunk->{type} // '') eq 'content_block_delta') {
-        my $d = $chunk->{delta} // {};
-        return $d->{text} // ''
-            if ($d->{type} // '') eq 'text_delta';
-        return '';
-    }
-
-    if (($chunk->{type} // '') eq 'message_start') {
-        my $msg = $chunk->{message} // {};
-        $$role_ref = $msg->{role} if defined $msg->{role};
-    }
-
-    return '';
 }
 
 # 解析 API 响应 JSON，返回 ($role, $content)；失败返回 (undef, undef)

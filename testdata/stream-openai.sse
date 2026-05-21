@@ -1,0 +1,13 @@
+data: {"id":"test","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
+
+data: {"id":"test","choices":[{"index":0,"delta":{"content":"Hello "},"finish_reason":null}]}
+
+data: {"id":"test","choices":[{"index":0,"delta":{"content":"world\n"},"finish_reason":null}]}
+
+data: {"id":"test","choices":[{"index":0,"delta":{"content":"## Section\n"},"finish_reason":null}]}
+
+data: {"id":"test","choices":[{"index":0,"delta":{"content":"body text\n"},"finish_reason":null}]}
+
+data: {"id":"test","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]
