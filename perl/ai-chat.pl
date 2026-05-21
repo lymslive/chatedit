@@ -538,6 +538,7 @@ sub _process_stream_lines
     my $role         = 'assistant';   # 默认值；实际角色从首个 chunk 中提取
     my $role_printed = 0;
     my $prev_ends_nl = 1;             # 上一个 delta 末尾是否换行（初始为1表示行首）
+    my $in_code_block = 0;            # 追踪 reformat 输出中的代码块开关状态
 
     while (defined(my $line = <$fh>)) {
         $line =~ s/\r?\n$//;
@@ -557,17 +558,17 @@ sub _process_stream_lines
                 $prev_ends_nl = 1;
             }
             # reformat 模式下修正 stdout 流中的标题等级；$content 仍存原始文本
-            # 以免与 append_to_file() 发生双重修正。已知局限：不区分代码块内外
+            # 以免与 append_to_file() 发生双重修正。通过 $in_code_block 追踪代码块状态
             if ($reformat) {
                 if ($prev_ends_nl) {
                     # delta 首字符即行首，整段均可修正
-                    print STDOUT scalar fix_heading_level($delta_text);
+                    print STDOUT scalar fix_heading_level($delta_text, \$in_code_block);
                 }
                 elsif (index($delta_text, "\n") >= 0) {
                     # delta 首段为行中间，不修正；首个换行后才是新行首
                     my $nl_pos = index($delta_text, "\n");
                     print STDOUT substr($delta_text, 0, $nl_pos + 1)
-                               . fix_heading_level(substr($delta_text, $nl_pos + 1));
+                               . fix_heading_level(substr($delta_text, $nl_pos + 1), \$in_code_block);
                 }
                 else {
                     print STDOUT $delta_text;
@@ -619,15 +620,25 @@ sub parse_response
 
 # 修正 AI 回复中的 Markdown 标题等级
 # h1 → h3，h2 → h3，h3+ 各增加一级
-# 注意：未区分代码块内外，三反引号代码块中的 ## 行也会被错误修正，属已知局限
-#       主要是要与流式响应的标题修正行为一致
+# 可选参数 $in_code_ref：标量引用，追踪代码块开关状态（用于跨调用的流式场景）
+# 未传入时使用局部变量，支持在单次调用内处理完整的代码块
+# 三反引号围栏内的标题行保持原样
 sub fix_heading_level
 {
-    my ($content) = @_;
+    my ($content, $in_code_ref) = @_;
+
+    my $local_in_code = 0;
+    $in_code_ref //= \$local_in_code;
 
     my @lines = split /\n/, $content, -1;
     my $count = 0;
     for my $line (@lines) {
+        # 三反引号行：切换代码块开关状态，自身不是标题，直接跳过
+        if ($line =~ /^```/) {
+            $$in_code_ref = !$$in_code_ref;
+            next;
+        }
+        next if $$in_code_ref;          # 代码块内：跳过标题修正
         next unless $line =~ /^(#+)/;
         $count++;
         my $level = length($1);

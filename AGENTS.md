@@ -157,10 +157,10 @@ Test files:
 | `07-simple-json-postdir.t` | `--simple`, `--json`, `--postdir` options |
 | `08-find-config.t` | `find_config_file` / `load_env` — search order (prog_name dirs first, then ai-chat fallback), `--env`/`--template` option handling |
 | `09-stream.t` | `_extract_stream_delta` (OpenAI/Anthropic SSE); `--stream --encode` sets `stream:true` |
-| `10-reformat.t` | `fix_heading_level` transformation (incl. count return); `--reformat` default per output path (file=1, stdout=0); `print_response` with `$for_file` flag; `append_to_file` trailing-newline separator logic |
+| `10-reformat.t` | `fix_heading_level` transformation (incl. count return, code-block preservation via `$in_code_ref`); `--reformat` default per output path (file=1, stdout=0); `print_response` with `$for_file` flag; `append_to_file` trailing-newline separator logic |
 | `11-inject-system.t` | `inject_system` — direct value, `@file` ref, suppress (`''`/`'0'`), undef+auto-search via `find_system_file`, no-duplicate when system already present |
 | `12-stdin-append.t` | `open_stdin` — STDIN buffered to tmp file; `--append` copies STDIN to stdout; trailing-newline supplement |
-| `13-stream-process.t` | `_process_stream_lines` — SSE main loop: content accumulation, reformat (header + heading fix), mid-line heading edge case, Anthropic format, skip invalid input; reads `testdata/stream-openai.sse` and `testdata/stream-anthropic.sse` |
+| `13-stream-process.t` | `_process_stream_lines` — SSE main loop: content accumulation, reformat (header + heading fix), code-block state tracking across deltas, mid-line heading edge case, Anthropic format, skip invalid input; reads `testdata/stream-openai.sse` and `testdata/stream-anthropic.sse` |
 
 **Mocking `call_api`**: override the sub via Perl's symbol table — no extra modules needed:
 ```perl

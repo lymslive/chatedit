@@ -223,6 +223,44 @@ is(fix_heading_level("    缩进行"),   "    缩进行",     '缩进行不变')
     like($written, qr/content-line\n\n/, 'append_to_file: 末尾非空行时自动补空行分隔');
 }
 
+# ============================================================================
+# fix_heading_level：代码块内标题保持原样
+# ============================================================================
+
+# 代码块内的 ## 不被修正，代码块外的 ## 正常升级
+{
+    my $input = "## 外部标题\n\n```python\n## 代码注释\n```\n\n## 另一外部标题";
+    my $want  = "### 外部标题\n\n```python\n## 代码注释\n```\n\n### 另一外部标题";
+    is(fix_heading_level($input), $want, '代码块内 ## 不修正，外部 ## → ###');
+}
+
+# count 不包含代码块内的标题行
+{
+    my ($out, $cnt) = fix_heading_level("## 外部\n\n```\n## 内部\n```");
+    is($cnt, 1, '代码块内标题不计入 reformed_count');
+}
+
+# 代码块后标题恢复修正
+{
+    my $input = "```\n## 在代码块里\n```\n## 在代码块外";
+    my $want  = "```\n## 在代码块里\n```\n### 在代码块外";
+    is(fix_heading_level($input), $want, '代码块结束后标题恢复修正');
+}
+
+# $in_code_ref 跨调用状态保持：第一次进入代码块，第二次仍在其中，第三次已出
+{
+    my $state = 0;
+    fix_heading_level("```\n## 进入代码块", \$state);
+    is($state, 1, '$in_code_ref: 第一次调用后 in_code=1');
+
+    my $r2 = fix_heading_level("## 仍在代码块内\n```", \$state);
+    ok(!$state, '$in_code_ref: 关闭后状态为假（不在代码块内）');
+    is($r2, "## 仍在代码块内\n```", '$in_code_ref: 代码块内标题不被修正');
+
+    my $r3 = fix_heading_level("## 代码块外", \$state);
+    is($r3, "### 代码块外", '$in_code_ref: 代码块外标题正常修正');
+}
+
 # 文件末尾已有空白行 → 始终补一个换行（简化逻辑，用户可自行删除多余空行）
 {
     no warnings 'once';

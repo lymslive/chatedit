@@ -1145,8 +1145,8 @@ print STDOUT scalar fix_heading_level($delta_text);
 
 ### COMMIT: 161d91fa6d43a3c993398201e6c46a8fa7b34bfb
 
-
-## 20260521-153800
+## TASK:20260521-153800
+-----------------------
 
 需求：`2026-05-21/4` 【重构】优化流式响应处理函数
 
@@ -1184,4 +1184,45 @@ print STDOUT scalar fix_heading_level($delta_text);
 ### 测试验证
 
 `prove perl/t/` 全部通过（239 tests，13 files）
+
+### COMMIT: 4ee1d49f02a5f7f6c87faafc4efbb4bccb3bfec0
+
+
+## TASK:20260521-162311
+-----------------------
+
+需求：`2026-05-21/5` 【增强】fix_heading_level 代码块内标题保持原样
+
+### 实施内容
+
+**`perl/ai-chat.pl` 变更：**
+
+- `fix_heading_level($content, $in_code_ref)` 新增可选第二参数 `$in_code_ref`（标量引用）
+  - 未传入时使用函数内局部变量，支持在单次调用内处理完整代码块
+  - 传入时跨调用共享状态，供流式场景保持代码块开关状态
+  - 行首三反引号（`/^```/`）触发状态切换；代码块内的标题行跳过修正
+  - 更新函数注释，移除原"已知局限"说明
+- `_process_stream_lines` 新增 `$in_code_block = 0` 状态变量
+  - 两处 `fix_heading_level` 调用均传入 `\$in_code_block`
+  - 更新注释，移除原"已知局限"说明
+
+### 新增测试
+
+**`perl/t/10-reformat.t` 新增 7 个用例：**
+- 代码块内 `##` 不被修正，代码块外正常升级
+- `reformed_count` 不包含代码块内标题
+- 代码块结束后标题恢复修正
+- `$in_code_ref` 跨调用状态保持（进入、保持、退出三阶段）
+
+**`perl/t/13-stream-process.t` 新增 8 个用例：**
+- 单次流中代码块内 h2 保持，代码块外 h2 → h3，`$content` 保存原始文本
+- 代码块跨多个 delta 时 `$in_code_block` 状态正确延续
+
+### 文档同步
+
+`CLAUDE.md` 更新 `10-reformat.t` 和 `13-stream-process.t` 描述，补充代码块处理说明。
+
+### 测试验证
+
+`prove perl/t/` 全部通过（254 tests，13 files，+15 新用例）
 

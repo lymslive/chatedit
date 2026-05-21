@@ -207,4 +207,54 @@ sub capture_stream_lines
     close $fh;
 }
 
+# ============================================================================
+# 代码块内标题保持原样（reformat=1 时也不修正）
+# ============================================================================
+{
+    my $sse = join('',
+        "data: {\"choices\":[{\"delta\":{\"content\":\"## Outside\\n\"},\"finish_reason\":null}]}\n",
+        "\n",
+        "data: {\"choices\":[{\"delta\":{\"content\":\"\`\`\`python\\n\"},\"finish_reason\":null}]}\n",
+        "\n",
+        "data: {\"choices\":[{\"delta\":{\"content\":\"## Inside Code\\n\"},\"finish_reason\":null}]}\n",
+        "\n",
+        "data: {\"choices\":[{\"delta\":{\"content\":\"\`\`\`\\n\"},\"finish_reason\":null}]}\n",
+        "\n",
+        "data: {\"choices\":[{\"delta\":{\"content\":\"## Outside Again\\n\"},\"finish_reason\":null}]}\n",
+        "\n",
+        "data: [DONE]\n",
+    );
+
+    my ($out, $role, $content) = capture_stream_lines($sse, 1);
+    is($content, "## Outside\n```python\n## Inside Code\n```\n## Outside Again\n",
+        'code block streaming: content stores original (unformatted)');
+    like($out,   qr/### Outside\n/,       'code block streaming: h2 → h3 outside code block');
+    like($out,   qr/## Inside Code\n/,    'code block streaming: h2 preserved inside code block');
+    unlike($out, qr/### Inside Code/,     'code block streaming: no h2→h3 inside code block');
+    like($out,   qr/### Outside Again\n/, 'code block streaming: h2 → h3 after code block ends');
+}
+
+# ============================================================================
+# 代码块跨多个 delta：$in_code_block 状态在 delta 间保持
+# ============================================================================
+{
+    # chunk1: 普通文字后开启代码块（行首 ```）
+    # chunk2: 代码块内 ## 不修正
+    # chunk3: 关闭代码块后 ## 正常修正
+    my $sse = join('',
+        "data: {\"choices\":[{\"delta\":{\"content\":\"intro\\n\`\`\`\\n\"},\"finish_reason\":null}]}\n",
+        "\n",
+        "data: {\"choices\":[{\"delta\":{\"content\":\"## code heading\\n\"},\"finish_reason\":null}]}\n",
+        "\n",
+        "data: {\"choices\":[{\"delta\":{\"content\":\"\`\`\`\\n## real heading\\n\"},\"finish_reason\":null}]}\n",
+        "\n",
+        "data: [DONE]\n",
+    );
+
+    my ($out, $role, $content) = capture_stream_lines($sse, 1);
+    like($out,   qr/## code heading\n/,  'multi-delta code block: h2 preserved inside block');
+    unlike($out, qr/### code heading/,   'multi-delta code block: no h2→h3 inside block');
+    like($out,   qr/### real heading\n/, 'multi-delta code block: h2 → h3 outside block');
+}
+
 done_testing();
