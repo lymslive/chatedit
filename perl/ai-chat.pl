@@ -518,7 +518,7 @@ sub call_api_stream
             if ($reformat) {
                 if ($prev_ends_nl) {
                     # delta 首字符即行首，整段均可修正
-                    print STDOUT fix_heading_level($delta_text);
+                    print STDOUT scalar fix_heading_level($delta_text);
                 }
                 elsif (index($delta_text, "\n") >= 0) {
                     # delta 首段为行中间，不修正；首个换行后才是新行首
@@ -616,14 +616,14 @@ sub fix_heading_level
     my @lines = split /\n/, $content, -1;
     my $count = 0;
     for my $line (@lines) {
-        next unless $line =~ /^(#+) /;
+        next unless $line =~ /^(#+)/;
         $count++;
         my $level = length($1);
         if ($level == 1) {
-            $line = '###' . substr($line, 1);  # # → ### (替换首个 #)
+            $line = '##' . $line;  # # → ### (替换首个 #)
         }
         elsif ($level < 6) {
-            $line = '#' . $line;               # h2→h3, ..., h5→h6
+            $line = '#' . $line;   # h2→h3, ..., h5→h6
         }
         # $level >= 6: 已到 Markdown 最大标题级，保持不变
     }

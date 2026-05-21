@@ -1098,3 +1098,39 @@ buffer 看到的流式输出）中仍会出现 `##` 等低级标题。
 - 参数 `$print_header` 改名为 `$reformat`，准确表达其含义
 - `$opt_json` 分支提到函数顶部早退出，主循环中不再需要该检查
 - `$header_printed` 改名为 `$role_printed`
+
+### COMMIT: b0d77f4e422bd49b738a435db0472ebd31058e10
+
+## TASK:20260521-122705
+-----------------------
+
+**需求**：TODO:2026-05-21/3 【bug】流式响应处理加了很多额外的 0
+
+### 问题分析
+
+在上个任务（TODO:2026-05-21/2）对 `call_api_stream()` 的重构中，新增了
+`fix_heading_level()` 调用用于修正 stdout 流中的标题等级：
+
+```perl
+print STDOUT fix_heading_level($delta_text);
+```
+
+`print` 以**列表上下文**求值其参数，导致 `fix_heading_level` 触发
+`wantarray` 为真，返回 `($result, $count)` 两个值。
+`print` 随即将两个值都输出——`$count`（无标题时为 `0`）被打印到每行末尾，
+产生了每行有效内容后跟 `0` 的异常现象。
+
+### 修复方案
+
+在调用处加 `scalar` 强制标量上下文，仅取 `$result`：
+
+```perl
+print STDOUT scalar fix_heading_level($delta_text);
+```
+
+其余对 `fix_heading_level` 的调用均已是标量或显式列表上下文，无需修改。
+
+### 测试验证
+
+`prove perl/t/` 全部通过（211 tests，12 files）
+
