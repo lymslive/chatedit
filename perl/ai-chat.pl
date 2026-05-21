@@ -465,7 +465,7 @@ sub call_api
 # $print_header：若为真，在首个 delta 到达时打印 "## role >>" 标题行（使用实际角色名）
 sub call_api_stream
 {
-    my ($json_file, $url, $key, $print_header) = @_;
+    my ($json_file, $url, $key, $reformat) = @_;
 
     my @cmd = (
         'curl', '-s', '-X', 'POST',
@@ -479,17 +479,25 @@ sub call_api_stream
         or die "错误: 无法执行 curl: $!\n";
     binmode $resp_fh, ':raw';
 
-    my $content        = '';
-    my $role           = 'assistant';   # 默认值；实际角色从首个 chunk 中提取
-    my $header_printed = 0;
+    # --json 模式：透传原始 SSE 行，不做任何解析
+    if ($opt_json) {
+        while (defined(my $line = <$resp_fh>)) {
+            $line =~ s/\r?\n$//;
+            print $line, "\n";
+        }
+        close $resp_fh;
+        my $exit = $? >> 8;
+        die "错误: curl 命令失败 (exit: $exit)\n" if $exit != 0;
+        return (undef, undef);
+    }
+
+    my $content      = '';
+    my $role         = 'assistant';   # 默认值；实际角色从首个 chunk 中提取
+    my $role_printed = 0;
+    my $prev_ends_nl = 1;             # 上一个 delta 末尾是否换行（初始为1表示行首）
 
     while (defined(my $line = <$resp_fh>)) {
         $line =~ s/\r?\n$//;
-
-        if ($opt_json) {
-            print $line, "\n";
-            next;
-        }
 
         next unless $line =~ /^data:\s*(.+)$/;
         my $data = $1;
@@ -500,12 +508,33 @@ sub call_api_stream
 
         my $delta_text = _extract_stream_delta($chunk, \$role);
         if ($delta_text ne '') {
-            if ($print_header && !$header_printed) {
+            if ($reformat && !$role_printed) {
                 print STDOUT "## $role >>\n\n";
-                $header_printed = 1;
+                $role_printed = 1;
+                $prev_ends_nl = 1;
             }
-            print STDOUT $delta_text;
+            # reformat 模式下修正 stdout 流中的标题等级；$content 仍存原始文本
+            # 以免与 append_to_file() 发生双重修正。已知局限：不区分代码块内外
+            if ($reformat) {
+                if ($prev_ends_nl) {
+                    # delta 首字符即行首，整段均可修正
+                    print STDOUT fix_heading_level($delta_text);
+                }
+                elsif (index($delta_text, "\n") >= 0) {
+                    # delta 首段为行中间，不修正；首个换行后才是新行首
+                    my $nl_pos = index($delta_text, "\n");
+                    print STDOUT substr($delta_text, 0, $nl_pos + 1)
+                               . fix_heading_level(substr($delta_text, $nl_pos + 1));
+                }
+                else {
+                    print STDOUT $delta_text;
+                }
+            }
+            else {
+                print STDOUT $delta_text;
+            }
             $content .= $delta_text;
+            $prev_ends_nl = ($delta_text =~ /\n$/) ? 1 : 0;
         }
     }
     close $resp_fh;
@@ -513,7 +542,7 @@ sub call_api_stream
 
     die "错误: curl 命令失败 (exit: $exit)\n" if $exit != 0;
 
-    return $opt_json ? (undef, undef) : ($role, $content);
+    return ($role, $content);
 }
 
 # 从 SSE chunk 中提取 delta 文本，同时更新 $role（通过引用）
@@ -578,6 +607,8 @@ sub parse_response
 
 # 修正 AI 回复中的 Markdown 标题等级
 # h1 → h3，h2 → h3，h3+ 各增加一级
+# 注意：未区分代码块内外，三反引号代码块中的 ## 行也会被错误修正，属已知局限
+#       主要是要与流式响应的标题修正行为一致
 sub fix_heading_level
 {
     my ($content) = @_;

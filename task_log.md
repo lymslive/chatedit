@@ -1053,3 +1053,48 @@ vim/ 内提交：`db552c1`
 - `perl perl/ai-chat.pl --version` → `ai-chat 1.0`
 - `bash bash/ai-curl.sh --version` → `ai-curl 1.0`
 
+### COMMIT: 82f587c483d9b95aab21849e9161292585de94e1
+
+## TASK:20260521-105750
+-----------------------
+
+**需求**：TODO:2026-05-21/2 【bug】流式回复内容的标题没有纠正
+
+### 问题分析
+
+`call_api_stream()` 在流式输出时，每个 delta 直接 `print STDOUT $delta_text`，
+未经任何标题等级修正。`fix_heading_level` 仅在以下两处被调用：
+- `append_to_file()`：写文件时（Phase 2）
+- `print_response()`：非流式模式的 stdout 输出
+
+因此，使用 `--stream --reformat 1` 时，写入文件是正确的，但 stdout（即 vim
+buffer 看到的流式输出）中仍会出现 `##` 等低级标题。
+
+### 修复方案
+
+采用"上一 delta 行尾记忆"方案，保持流式实时性：
+- 新增 `$prev_ends_nl` 变量，记录上一个 delta 末尾是否以换行结束（初始为 1）
+- 当 `$print_header`（即 reformat 模式）开启，且 `$prev_ends_nl` 为真，且当前
+  delta 以 `#` 开头时，调用 `fix_heading_level()` 修正后再输出
+- `$content` 仍累积原始文本，供后续 `append_to_file` 独立修正，避免双重处理
+
+### 已知局限
+
+`fix_heading_level` 不区分代码块内外，三反引号代码块中的 `##` 行也会被错误修正。
+在 `fix_heading_level` 函数处添加了注释说明此已知局限。
+流式修正同样受此限制（delta 边界恰好在代码块内 `#` 行首时才触发）。
+
+### 测试验证
+
+`prove perl/t/` 全部通过（211 tests）
+### 后续补充（同一需求）
+
+在初版方案（仅检测 delta 首字符）基础上发现遗漏：
+- 单个 delta 内部也可能出现 `\n##` 形式的标题，需在换行后同样修正
+- 修正为：`$prev_ends_nl` 为真时整段调用 `fix_heading_level()`；否则若 delta
+  内含换行，则首段（行中间）原样输出，从第一个 `\n` 之后的部分才修正
+
+同时重构 `call_api_stream()` 以提升代码可读性：
+- 参数 `$print_header` 改名为 `$reformat`，准确表达其含义
+- `$opt_json` 分支提到函数顶部早退出，主循环中不再需要该检查
+- `$header_printed` 改名为 `$role_printed`
