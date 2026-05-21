@@ -1015,3 +1015,41 @@ Vim8 `out_mode` 默认 `'nl'`：按换行分批调用回调，保证每次 `appe
 
 vim/ 内提交：`db552c1`
 
+
+### COMMIT: 155ead4b725b90723d1ed3b49de6cad3bc7c1cab
+
+## TASK:20260521-095009
+-----------------------
+
+**需求**：TODO:2026-05-21/1 添加版本标志及完善文档
+
+### 实施内容
+
+**`bash/ai-curl.sh`**：
+- 添加 `VERSION="1.0"` 常量
+- 新增 `--version|-v` 选项：打印 `ai-curl 1.0` 并退出
+- 更新 `usage()` 说明及用法首行
+
+**`perl/ai-chat.pl`**：
+- 添加 `our $VERSION = '1.0'` 常量
+- 添加 `our $opt_version = 0` 及 `'version|v'` GetOptions 绑定
+- `run()` 中增加 `--version` 提前处理：打印 `ai-chat 1.0` 并退出
+- 更新 `usage()` 添加 `-v, --version` 说明
+
+**`vim/autoload/chatedit.vim`**：
+- 文件顶部添加 `let g:chatedit_version = '1.0'`
+
+**`vim/doc/chatedit.txt`**（新建）：
+- 标准 Vim 帮助文档格式，包含：Introduction、Requirements、Installation、Configuration（`g:chatedit_cmd`、`g:chatedit_version`）、Commands（`:AI`、`:AR`）、Abbreviations、Mappings、Chat Format、Changelog 各章节
+
+**`readme.md`**：
+- Vim 插件章节精简：保留 `:AI/AR` 命令表，删去 Markdown 缩写表
+- 添加指向 `vim/readme.md` 的链接
+- 目录结构补充 `autoload/` 与 `doc/` 条目
+
+### 测试验证
+
+- `prove perl/t/` 全部通过（211 tests）
+- `perl perl/ai-chat.pl --version` → `ai-chat 1.0`
+- `bash bash/ai-curl.sh --version` → `ai-curl 1.0`
+

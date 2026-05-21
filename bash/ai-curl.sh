@@ -7,6 +7,7 @@ set -euo pipefail
 
 # 脚本名（去掉 .sh 后缀），用于配置文件自动查找
 PROG="$(basename "$0" .sh)"
+VERSION="1.0"
 
 # 检查核心依赖
 if ! command -v curl &>/dev/null; then
@@ -17,12 +18,13 @@ HAS_JQ=0
 command -v jq &>/dev/null && HAS_JQ=1
 
 usage() {
-    echo "用法: ai-curl [--env file] [--url url] [--key key] [--model model] [-j] [-d] [-s] [--system msg] [json_file]"
+    echo "用法: ai-curl [--env file] [--url url] [--key key] [--model model] [-j] [-d] [-s] [-v] [--system msg] [json_file]"
     echo "      从 STDIN 读取 JSON: ai-curl [选项] < input.json"
     echo "  -j, --json      输出原始 JSON（默认用 jq 提取聊天内容）"
     echo "  -d, --debug     打印最终 curl 命令到 stderr，并保留临时文件"
     echo "  -s, --simple    将输入视为纯文本，自动拼装为最简 chat JSON（文件名以 .json 结尾时忽略）"
     echo "  --system <msg>  在 chat JSON 中插入 system 消息；以 @ 开头时读取文件内容"
+    echo "  -v, --version   显示版本号"
 }
 
 # 命令行参数（优先级最高）
@@ -46,6 +48,7 @@ while [[ $# -gt 0 ]]; do
         --debug|-d)   OPT_DEBUG=1;     shift   ;;
         --simple|-s)  OPT_SIMPLE=1;    shift   ;;
         --system)     OPT_SYSTEM="$2"; shift 2 ;;
+        --version|-v) echo "$PROG $VERSION"; exit 0 ;;
         --help|-h)    usage; exit 0 ;;
         -*) echo "未知选项: $1" >&2; exit 1 ;;
         *)  JSON_FILE="$1"; shift ;;

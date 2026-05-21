@@ -190,6 +190,7 @@ Standard Vim plugin layout inside the submodule:
 - `plugin/chatedit.vim` — auto-loaded; defines `:AI` and `:AR` commands (async on Vim8+, sync fallback on Vim7)
 - `autoload/chatedit.vim` — async implementation (`chatedit#RunChat`, `chatedit#HeadingIndent`); requires Vim 8 with `+job`
 - `ftplugin/markdown.vim` — insert-mode abbreviations + normal-mode heading-indent mappings
+- `doc/chatedit.txt` — standard Vim help documentation (`:help chatedit`)
 
 **Installing the plugin** (Vim 8+ native packages — either symlink or clone directly):
 ```bash

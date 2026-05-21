@@ -232,13 +232,8 @@ git clone git@github.com:lymslive/chatedit-vim.git ~/.vim/pack/chatedit/start/ch
 | `:AR` | 以 `--simple` 模式调用，回复替换当前文件内容 |
 | `:'<,'>AR` | 以 `--simple` 模式调用，回复替换选区内容 |
 
-`.md` 文件中的插入模式缩写（快速输入对话标题）：
-
-```
-#s  →  ## system >>
-#u  →  ## user >>
-#a  →  ## assistant >>
-```
+插入模式缩写、normal 模式标题等级快捷键等 Vim 编辑功能，
+详见 [vim/readme.md](vim/readme.md)。
 
 ## 目录结构
 
@@ -253,8 +248,12 @@ chatedit/
 ├── vim/                    # git 子模块 → github.com/lymslive/chatedit-vim
 │   ├── plugin/
 │   │   └── chatedit.vim    # Vim 插件主体（:AI / :AR 命令）
-│   └── ftplugin/
-│       └── markdown.vim    # Markdown 文件类型插件（对话标题缩写）
+│   ├── autoload/
+│   │   └── chatedit.vim    # 异步实现（Vim 8+ job API）
+│   ├── ftplugin/
+│   │   └── markdown.vim    # Markdown 文件类型插件（对话标题缩写）
+│   └── doc/
+│       └── chatedit.txt    # Vim 帮助文档
 ├── docs/
 │   └── chat-format.md      # Markdown 聊天文件格式规范
 ├── testdata/

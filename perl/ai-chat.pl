@@ -10,6 +10,7 @@ use File::Basename qw(basename);
 
 # 脚本名（去掉 .pl 后缀），用于配置文件自动查找（our 供测试文件覆盖）
 our $prog_name = basename($0, '.pl');
+our $VERSION   = '1.0';
 
 # ---- 选项解析 ---------------------------------------------------------------
 
@@ -29,6 +30,7 @@ our $opt_simple       = 0;
 our $opt_json         = 0;
 our $opt_postdir      = '';
 our $opt_stream       = 0;
+our $opt_version      = 0;
 
 unless (caller) { run() }
 
@@ -51,8 +53,10 @@ sub run
         'json|j'       => \$opt_json,
         'postdir=s'    => \$opt_postdir,
         'stream'       => \$opt_stream,
+        'version|v'    => \$opt_version,
     ) or do { usage(); exit 1 };
 
+    if ($opt_version) { print "$prog_name $VERSION\n"; exit 0 }
     if ($opt_help) { usage(); exit 0 }
 
     if ($opt_decode) {
@@ -827,6 +831,7 @@ sub usage
   -j, --json         直接输出原始 API 响应 JSON，忽略 -a
   --postdir <dir>    将发送的请求 JSON 保存到指定目录（命名格式：程序名-yyyymmdd-hhmmss-PID.json）
   -d, --debug            打印调试信息到 stderr
+  -v, --version          显示版本号
   -h, --help             显示此帮助
 
 用法示例:
