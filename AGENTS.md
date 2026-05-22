@@ -12,13 +12,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |--------|----------|------|
 | `bash/ai-curl.sh` | Bash | Wraps `curl` to send a JSON payload to an AI API endpoint |
 | `perl/ai-chat.pl` | Perl | Parses Markdown chat files → assembles JSON → calls API via `curl` → writes response back |
+| `python/ai-chat.py` | Python | Python port of `ai-chat.pl`; uses `openai` SDK instead of `curl`; same CLI interface |
 | `bin/ai-curl` | symlink | Points to `bash/ai-curl.sh` |
 | `vim/` (submodule) | Vimscript | Git submodule → `github.com/lymslive/chatedit-vim`; `:AI` / `:AR` commands + Markdown abbreviations |
 | `Makefile` | Make | `test` / `install` / `help` targets |
 
-The two scripts can be used independently or piped together:
+The Perl and Python scripts share the same Markdown chat format and CLI flags; choose based on your environment.
+The Perl script pipes through `curl`; the Python script uses the `openai` SDK directly (requires `pip install openai` or `apt install python3-openai`):
 ```bash
 cat chat.md | perl/ai-chat.pl --encode | bash/ai-curl.sh
+python3 python/ai-chat.py chat.md   # equivalent Python workflow
 ```
 
 ## Running the Tools
@@ -80,7 +83,9 @@ API_KEY=sk-xxxxxxxx
 API_MODEL=gpt-4o
 ```
 
-Both scripts derive the env filename from the script name (`$0` with `.pl`/`.sh` stripped), so a symlink `kimi-chat` → `ai-chat.pl` will look for `kimi-chat.env` first, then fall back to the generic name. Search order (highest priority first):
+**Note for Python version**: `API_URL` may be either the full endpoint URL (`.../v1/chat/completions`) or the base URL (`.../v1`); `ai-chat.py` strips the `/chat/completions` suffix automatically before passing to the `openai` SDK.
+
+Both scripts derive the env filename from the script name (`$0` with `.pl`/`.py`/`.sh` stripped), so a symlink `kimi-chat` → `ai-chat.py` will look for `kimi-chat.env` first, then fall back to the generic name. Search order (highest priority first):
 1. `--env <file>` option
 2. `./$PROG.env`  (fallback: `./ai-curl.env` / `./ai-chat.env`)
 3. `./.chatedit/$PROG.env`  (fallback: `./.chatedit/ai-curl.env` / `./.chatedit/ai-chat.env`)
@@ -129,13 +134,17 @@ The main flow inside `run()`:
 
 | Dependency | Required? | Used by |
 |------------|-----------|---------|
-| `curl` | Required | both scripts |
+| `curl` | Required | `ai-curl.sh`, `ai-chat.pl` |
 | `jq` | Optional | `ai-curl.sh` (degrades to raw JSON without it) |
 | Perl 5.14+ | Required | `ai-chat.pl` |
 | `JSON::PP` | Required | `ai-chat.pl` (bundled with Perl 5.14+, no CPAN install needed) |
 | `envsubst` | Required | `ai-curl.sh` (from `gettext` package) |
+| Python 3.8+ | Required | `ai-chat.py` |
+| `openai` SDK | Required | `ai-chat.py` (`pip install openai` or `apt install python3-openai`) |
 
 ## Testing
+
+### Perl tests
 
 Unit tests live in `perl/t/` and use only `Test::More` (bundled with Perl). Run with:
 
@@ -165,6 +174,34 @@ Test files:
 **Mocking `call_api`**: override the sub via Perl's symbol table — no extra modules needed:
 ```perl
 local *main::call_api = sub { return $canned_response_json };
+```
+
+### Python tests
+
+Unit tests live in `python/tests/` and use only `unittest` (standard library). Run with:
+
+```bash
+python3 -m unittest discover python/tests/              # run all tests
+python3 -m unittest python.tests.test_parse_chat        # run a single file
+```
+
+Test files:
+
+| File | What it tests |
+|------|---------------|
+| `test_normalize_role.py` | `normalize_role` — abbreviation and case handling |
+| `test_parse_chat.py` | `parse_chat` — roles, comments, code blocks, `@file`, `!cmd` |
+| `test_fix_heading.py` | `fix_heading_level` — heading shifts, code-block protection, stream state |
+| `test_find_config.py` | `find_config_file` / `load_env` — search order, CLI overrides, quote stripping |
+| `test_api_mock.py` | full pipeline with mocked `call_api`; `run_non_stream` + file append + reformat |
+
+**Note**: `ai-chat.py` uses a hyphen in its name, which prevents direct `import`. Tests load it via `importlib.util.spec_from_file_location`. The shared `python/tests/helper.py` provides `load_ai_chat()` and `make_opt()` utilities.
+
+**Mocking `call_api`** (Python):
+```python
+from unittest.mock import patch
+with patch.object(ai_chat, 'call_api', return_value=('assistant', 'Hello')):
+    ai_chat.run_non_stream(...)
 ```
 
 Manual sanity checks with existing testdata:
@@ -231,9 +268,13 @@ Non-heading lines fall through to the default `>>` (indent) / `<<` (unindent) be
 ## Makefile
 
 ```bash
-make help     # list targets
-make test     # run prove perl/t/
-make install  # copy ai-chat.pl + ai-curl.sh to ~/bin  (override: make install INSTALL_DIR=/usr/local/bin)
+make help          # list targets
+make test          # run all tests (Perl + Python)
+make test-perl     # run prove perl/t/
+make test-python   # run python3 -m unittest discover python/tests/
+make install       # install ai-chat.pl, ai-curl.sh, ai-chat.py to ~/bin
+                   # only copies files newer than the installed version
+                   # override: make install INSTALL_DIR=/usr/local/bin
 ```
 
 ## Task/Log Files

@@ -6,3 +6,4 @@ local-*
 # 允许 testdata/ 下的 .chatedit 子目录（测试用 env 文件）
 !testdata/.chatedit/
 !testdata/.chatedit/**
+__pycache__/

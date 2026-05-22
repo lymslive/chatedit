@@ -1271,3 +1271,50 @@ print STDOUT scalar fix_heading_level($delta_text);
 1. `【迁移】Python 版 ai-chat.py 实现`（分四个阶段：骨架、API、流式、完善）
 2. `【迁移】Node.js 版 ai-chat.js 实现`（同样四个阶段）
 
+
+### COMMIT: 5a24e00e1a4b95e642617742f58712b35f066554
+
+## TASK:20260522-173148
+-----------------------
+
+> TODO: 2026-05-22/2 【迁移】Python 版 ai-chat.py 实现
+
+### 实施内容
+
+**阶段一：核心骨架**
+
+- 创建 `python/` 目录及 `python/ai-chat.py`
+- 实现 `parse_args`（argparse）、`find_config_file`、`load_env`、`load_template`
+- 实现 `parse_chat` 状态机（含 `@file`、`!cmd` 扩展）、`normalize_role`
+- 实现 `inject_system`、`decode_to_md`、`open_input`、`open_stdin`
+
+**阶段二：API 调用与响应处理**
+
+- 实现 `make_client`（构造 `openai.OpenAI`，自动去掉 URL 末尾的 `/chat/completions` 以兼容 Perl env 文件格式）
+- 实现 `call_api`（非流式）、`call_api_raw`（`--json` 非流式）
+- 实现 `fix_heading_level`（含 `in_code_state` 流式跨调用状态）
+- 实现 `print_response`、`append_to_file`、`run_non_stream`
+
+**阶段三：流式响应**
+
+- 实现 `call_api_stream`（`create(stream=True)` 迭代，兼容 openai 1.12.0）
+- 实现 `call_api_stream_raw`（`with_streaming_response`，`--json --stream` 模式）
+- 实现 `run_stream`
+
+**阶段四：完善与测试**
+
+- 实现 `save_to_postdir`（`--postdir` 调试选项）、`usage()`、`--version`
+- 创建 `python/tests/` 及 5 个测试文件（`unittest` 标准库）：
+  - `test_normalize_role.py`、`test_parse_chat.py`、`test_fix_heading.py`
+  - `test_find_config.py`、`test_api_mock.py`
+- 共 49 个测试，全部通过
+- 更新 `Makefile`：合并 `install-python` 到 `install`，利用 Make 依赖机制按需复制
+- 同步更新 `CLAUDE.md`：工具表、依赖表、测试说明、Makefile 说明
+
+### 关键差异与注意事项
+
+- **API_URL 兼容**：Perl env 文件的 `API_URL` 含完整路径（`/v1/chat/completions`），openai SDK 需要 base URL；`make_client` 自动 strip 末尾路径
+- **openai 版本**：系统通过 `apt install python3-openai` 安装了 1.12.0；`.stream()` 上下文管理器在此版本不可用，改用 `create(stream=True)` 迭代
+- **`sys.stdout.reconfigure`**：StringIO 不支持此方法，加 `hasattr` 防护使测试可正常 mock stdout
+- **不支持 Anthropic native 格式**：Python 版仅支持 OpenAI 兼容格式（openai SDK 限制）
+
