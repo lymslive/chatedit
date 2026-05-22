@@ -1187,7 +1187,6 @@ print STDOUT scalar fix_heading_level($delta_text);
 
 ### COMMIT: 4ee1d49f02a5f7f6c87faafc4efbb4bccb3bfec0
 
-
 ## TASK:20260521-162311
 -----------------------
 
@@ -1225,4 +1224,50 @@ print STDOUT scalar fix_heading_level($delta_text);
 ### 测试验证
 
 `prove perl/t/` 全部通过（254 tests，13 files，+15 新用例）
+
+### COMMIT: 0778a1be4dd04652d3f8bf214987c5c4792e55e4
+
+## TASK:20260522-122015
+-----------------------
+
+需求：`2026-05-22/1` 【设计】ai-chat.pl 迁移 python node 计划
+
+### 实施内容
+
+**梳理 `perl/ai-chat.pl` 核心逻辑，编写两份迁移设计文档：**
+
+- `doing_plan.tmp/ai-chat-python-design.md`：Python 3 实现方案
+- `doing_plan.tmp/ai-chat-node-design.md`：Node.js 实现方案
+
+### 关键设计决策
+
+**唯一第三方依赖：`openai` SDK（Python pip / Node npm）**
+
+放弃纯标准库方案，改用 `openai` 官方 SDK：
+- SSE 流式处理开箱即用，无需手动解析 `data:` 行
+- 支持 `base_url` 参数兼容所有 OpenAI 兼容接口（Kimi、DeepSeek、阿里云等）
+- `with_raw_response` / `with_streaming_response` 仍支持 `--json` 原始输出
+- 已知限制：不支持 Anthropic native 格式，但 Anthropic 也提供兼容接口
+
+**分发方式差异：**
+- Python 版：单文件 + `pip install openai`（安装到 site-packages，脚本位置无关）
+- Node.js 版：需 npm 包结构（`package.json` + `node_modules/`），通过 `npm install -g` 分发
+
+**测试目录约定（各语言社区规范）：**
+- Python：`python/tests/test_*.py`，使用内置 `unittest`
+- Node.js：`node/test/test_*.js`，使用内置 `node:test`（Node 18+）
+
+### 回答用户问题
+
+- **openai SDK 是推荐用法**：大多数 API 文档示例都用 `openai` 包，是社区最佳实践
+- **Python 可单文件部署**：pip install 装到 site-packages，任意位置脚本均可 import
+- **Node.js 不能单文件部署**：模块查找依赖 node_modules 目录，需 npm 包结构
+- **node_modules 的历史问题**：微包文化导致依赖树庞大；AI 时代趋向于自己实现简单逻辑，但复杂 SDK（如 openai）仍值得依赖
+- **测试目录**：Perl 的 `t/` 是 CPAN 独有约定，Python 用 `tests/`，Node 用 `test/`
+
+### 任务拆分
+
+在 `task_todo.md` 末尾新增两个大 TODO 任务（无 ID，待正式实施时赋 ID）：
+1. `【迁移】Python 版 ai-chat.py 实现`（分四个阶段：骨架、API、流式、完善）
+2. `【迁移】Node.js 版 ai-chat.js 实现`（同样四个阶段）
 

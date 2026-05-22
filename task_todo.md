@@ -655,6 +655,97 @@ token 输出。
 
 ### DONE: 20260521-162311
 
+## TODO:2026-05-22/1 【设计】ai-chat.pl 迁移 python node 计划
+
+请重新梳理当前 ai-chat.pl 的核心逻辑，准备迁移 python 与 node 的实现版本。
+在 doing_plan.tmp/ 目录写两份详细设计说明。
+
+- 复刻核心思路与行为逻辑
+- 保持命令行参数的意义与用法
+- 可以用各自流行稳定的包替换 curl 请求
+
+假设实现完后，将脚本安装到 bin/ 后，用如下三者之一的软链接：
+
+```
+ln -s ai-chat.pl ai-chat
+ln -s ai-chat.py ai-chat
+ln -s ai-chat.js ai-chat
+```
+
+那么 `ai-chat` 应该表现出相同的功能。
+
+ps: 我没用过 python 或 node 写过功能较复杂的程序，对其包管理功能不熟，请问安装
+时能只安装一个脚本吗？它们的依赖包是否也要一起安装才能使用。
+
+然后可以修改这个 `task_todo.md` 文档，拆分迁移任务，追加到末尾。
+拆分粒度适中，最好能在 claude 等 agent 的一个会话上下文完成任务。
+
+自动拆分的任务先只用无 ID 的 `TODO` ，决定正式实施时再手动赋 ID 。
+
+### DONE: 20260522-122015
+
+## TODO: 【迁移】Python 版 ai-chat.py 实现
+
+参考设计文档 `doing_plan.tmp/ai-chat-python-design.md`，实现 `python/ai-chat.py`。
+依赖：`pip install openai`（唯一第三方包），其余全部使用标准库。
+
+**阶段一：核心骨架**
+- 建立 `python/` 子目录，新建 `ai-chat.py`，添加 shebang `#!/usr/bin/env python3`
+- 实现 `parseArgs`（argparse）、`loadEnv`、`findConfigFile` 三个函数
+- 实现 `readFileContent`、`loadTemplate`（JSON 模板加载）
+- 实现 `parseChat` 状态机（含 @file、!cmd 扩展）与 `normalizeRole`
+- 实现 `injectSystem`、`decodeToMd`（--decode 模式）
+- 验证：`python3 python/ai-chat.py --encode testdata/chat-hello.md | jq .`
+
+**阶段二：API 调用与响应处理**
+- 实现 `makeClient`（构造 openai.OpenAI，传入 base_url 与 api_key）
+- 实现 `callApi`（`client.chat.completions.create` 非流式）
+- 实现 `fixHeadingLevel`（含 in_code_state 参数）、`printResponse`、`appendToFile`
+- 实现 `runNonStream`（两阶段输出逻辑）
+- 验证：`python3 python/ai-chat.py -a testdata/chat-hello.md`（需有效 env）
+
+**阶段三：流式响应**
+- 实现 `callApiStream`（`client.chat.completions.stream` SDK 流式迭代器）
+- 实现 `callApiRaw` / `callApiStreamRaw`（`with_raw_response` 支持 --json 选项）
+- 实现 `runStream`
+- 验证：`python3 python/ai-chat.py --stream -a testdata/chat-hello.md`
+
+**阶段四：完善与测试**
+- 实现 `openStdin`（含 --append 复制 stdin 到 stdout）
+- 完成 `--version`、`--debug`、`--postdir`、`--simple` 等选项
+- 编写 `python/tests/test_*.py` 单元测试（用内置 `unittest`）
+- 更新 CLAUDE.md 与 Makefile（增加 python 相关 test/install 目标）
+
+## TODO: 【迁移】Node.js 版 ai-chat.js 实现
+
+参考设计文档 `doing_plan.tmp/ai-chat-node-design.md`，实现 `node/ai-chat.js`。
+依赖：`npm install openai`（唯一第三方包），需 npm 包结构，通过 `npm install -g` 分发。
+
+**阶段一：项目结构与核心骨架**
+- 建立 `node/` 子目录，初始化 `package.json`（含 bin 入口、openai 依赖）
+- 新建 `ai-chat.js`，添加 shebang，整体采用 async/await 架构
+- 实现 `parseArgs`（手动解析 process.argv）、`loadEnv`、`findConfigFile`
+- 实现 `readFileContent`、`loadTemplate`、`parseChat`、`normalizeRole`
+- 实现 `injectSystem`、`decodeToMd`
+- 验证：`node node/ai-chat.js --encode testdata/chat-hello.md`
+
+**阶段二：API 调用与响应处理**
+- `npm install` 安装 openai 包
+- 实现 `makeClient`（构造 `new OpenAI({ baseURL, apiKey })`）
+- 实现 `callApi`（`client.chat.completions.create` async 非流式）
+- 实现 `fixHeadingLevel`、`printResponse`、`appendToFile`、`runNonStream`
+
+**阶段三：流式响应**
+- 实现 `callApiStream`（`client.chat.completions.stream` async 迭代器）
+- 实现 `callApiRaw` / `callApiStreamRaw`（`withResponse` 支持 --json 选项）
+- 实现 `runStream`
+
+**阶段四：完善与测试**
+- 实现 `openStdin`（async 读取 stdin，--append 复制到 stdout）
+- 完成所有辅助选项
+- 编写 `node/test/test_*.js` 单元测试（用内置 `node:test`，Node 18+）
+- 更新 Makefile（增加 node 相关 test/install 目标）
+
 ## TODO: 长期计划
 
 尝试用不同的语言实现基本的 AI 聊天功能。
