@@ -642,8 +642,8 @@ async function callApi(client, model, messages) {
 }
 
 async function callApiRaw(client, model, messages) {
-    const resp = await client.chat.completions.withResponse().create({ model, messages });
-    const text = await resp.response.text();
+    const { response } = await client.chat.completions.create({ model, messages }).withResponse();
+    const text = await response.text();
     process.stdout.write(text);
 }
 
@@ -656,7 +656,7 @@ async function callApiStream(client, model, messages, reformat) {
     let rolePrinted = false, prevEndsNl = true;
     const inCodeState = [false];
 
-    const stream = client.chat.completions.stream({ model, messages });
+    const stream = await client.chat.completions.create({ model, messages, stream: true });
     for await (const chunk of stream) {
         const delta = chunk.choices[0] && chunk.choices[0].delta;
         if (!delta) continue;
@@ -693,7 +693,7 @@ async function callApiStream(client, model, messages, reformat) {
 }
 
 async function callApiStreamRaw(client, model, messages) {
-    const stream = client.chat.completions.stream({ model, messages });
+    const stream = await client.chat.completions.create({ model, messages, stream: true });
     for await (const chunk of stream) {
         // 输出原始 SSE 事件的 JSON 表示
         process.stdout.write('data: ' + JSON.stringify(chunk) + '\n');
