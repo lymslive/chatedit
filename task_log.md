@@ -1372,3 +1372,5 @@ print STDOUT scalar fix_heading_level($delta_text);
 - **设计决策**：`setOpt`/`getOpt` 导出接口让测试可以直接设置全局 `opt`，避免需要完整流程
 - **流式原始输出**：`callApiStreamRaw` 输出 SDK 解析后的 JSON chunk，而非原始 SSE 字节流
 
+### COMMIT: 412a22401f627158618a78150099fc9cd2e92c01
+
