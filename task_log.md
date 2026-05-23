@@ -1318,3 +1318,57 @@ print STDOUT scalar fix_heading_level($delta_text);
 - **`sys.stdout.reconfigure`**：StringIO 不支持此方法，加 `hasattr` 防护使测试可正常 mock stdout
 - **不支持 Anthropic native 格式**：Python 版仅支持 OpenAI 兼容格式（openai SDK 限制）
 
+### COMMIT: bd0069137d772c3b33cb0273eeda06328ae4180e
+
+## TASK:20260523-150240
+-----------------------
+
+> TODO: 2026-05-22/3 【迁移】Node.js 版 ai-chat.js 实现
+
+### 实施内容
+
+**阶段一：项目结构与核心骨架**
+
+- 创建 `node/` 目录，初始化 `node/package.json`（含 bin 入口、openai 依赖、engines>=18）
+- 新建 `node/ai-chat.js`，添加 shebang，采用 async/await 架构
+- 实现 `parseArgs`（手动解析 process.argv）、`loadEnv`、`findConfigFile` 及衍生函数
+- 实现 `parseChat`、`normalizeRole`、`includeFile`、`runCommand`（同步函数）
+- 实现 `injectSystem`、`decodeToMd`、`readFileContent`、`saveToPostdir`
+
+**阶段二：API 调用与响应处理**
+
+- 执行 `npm install` 安装 `openai` 包
+- 实现 `makeClient`（构造 `new OpenAI({ baseURL, apiKey })`，自动 strip `/chat/completions`）
+- 实现 `callApi`（非流式 async）、`callApiRaw`（`--json` 非流式，`withResponse`）
+- 实现 `fixHeadingLevel`（含 `inCodeState` 跨调用状态）、`printResponse`、`appendToFile`
+- 实现 `runNonStream`
+
+**阶段三：流式响应**
+
+- 实现 `callApiStream`（`client.chat.completions.stream` async 迭代器）
+- 实现 `callApiStreamRaw`（`--json --stream` 模式，输出 SSE JSON 行）
+- 实现 `runStream`
+
+**阶段四：完善与测试**
+
+- 实现 `openStdin`（async，`--append` 模式下同时复制到 stdout）
+- 实现 `usage()`、`--version`
+- 在文件末尾添加 `module.exports` 导出接口，方便测试文件调用（`setOpt`/`getOpt`）
+- 创建 `node/test/` 及 6 个测试文件（`node:test` 内置框架，Node 18+）：
+  - `test_normalize_role.js`（5项）、`test_parse_chat.js`（10项）
+  - `test_fix_heading.js`（9项）、`test_find_config.js`（5项）
+  - `test_decode_to_md.js`（2项）、`test_api_mock.js`（4项）
+- 共 35 个测试，全部通过
+- 修复 `parseChat` 中 `replace(/^\n+|\n+$/, '')` 漏掉全局匹配的 bug（改为两次 replace）
+- 更新 `.gitignore`：添加 `node/node_modules/` 和 `node/package-lock.json`
+- 更新 `Makefile`：增加 `test-node` 目标，`install` 目标加入 `ai-chat.js`
+- 同步更新 `CLAUDE.md`、`readme.md`：工具表、安装说明、依赖表、测试说明
+
+### 关键差异与注意事项
+
+- **npm 包结构**：Node.js 模块查找从脚本所在目录向上找 `node_modules/`，不能单文件分发，必须有 `package.json` 和 `node_modules/`
+- **API_URL 兼容**：同 Python 版，自动 strip `/chat/completions` 后缀再传给 SDK
+- **node --test 目录参数**：Node v22.22.0 不支持 `node --test dir/`，需用 glob：`node --test node/test/*.js`
+- **设计决策**：`setOpt`/`getOpt` 导出接口让测试可以直接设置全局 `opt`，避免需要完整流程
+- **流式原始输出**：`callApiStreamRaw` 输出 SDK 解析后的 JSON chunk，而非原始 SSE 字节流
+

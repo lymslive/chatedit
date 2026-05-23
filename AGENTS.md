@@ -13,15 +13,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `bash/ai-curl.sh` | Bash | Wraps `curl` to send a JSON payload to an AI API endpoint |
 | `perl/ai-chat.pl` | Perl | Parses Markdown chat files → assembles JSON → calls API via `curl` → writes response back |
 | `python/ai-chat.py` | Python | Python port of `ai-chat.pl`; uses `openai` SDK instead of `curl`; same CLI interface |
+| `node/ai-chat.js` | Node.js | Node.js port of `ai-chat.pl`; uses `openai` SDK; async/await architecture; npm package |
 | `bin/ai-curl` | symlink | Points to `bash/ai-curl.sh` |
 | `vim/` (submodule) | Vimscript | Git submodule → `github.com/lymslive/chatedit-vim`; `:AI` / `:AR` commands + Markdown abbreviations |
 | `Makefile` | Make | `test` / `install` / `help` targets |
 
-The Perl and Python scripts share the same Markdown chat format and CLI flags; choose based on your environment.
-The Perl script pipes through `curl`; the Python script uses the `openai` SDK directly (requires `pip install openai` or `apt install python3-openai`):
+The Perl, Python, and Node.js scripts share the same Markdown chat format and CLI flags; choose based on your environment.
+The Perl script pipes through `curl`; the Python and Node.js scripts use the `openai` SDK directly:
 ```bash
 cat chat.md | perl/ai-chat.pl --encode | bash/ai-curl.sh
 python3 python/ai-chat.py chat.md   # equivalent Python workflow
+node node/ai-chat.js chat.md        # equivalent Node.js workflow (requires npm install in node/)
 ```
 
 ## Running the Tools
@@ -83,9 +85,9 @@ API_KEY=sk-xxxxxxxx
 API_MODEL=gpt-4o
 ```
 
-**Note for Python version**: `API_URL` may be either the full endpoint URL (`.../v1/chat/completions`) or the base URL (`.../v1`); `ai-chat.py` strips the `/chat/completions` suffix automatically before passing to the `openai` SDK.
+**Note for Python/Node.js version**: `API_URL` may be either the full endpoint URL (`.../v1/chat/completions`) or the base URL (`.../v1`); both `ai-chat.py` and `ai-chat.js` strip the `/chat/completions` suffix automatically before passing to the `openai` SDK.
 
-Both scripts derive the env filename from the script name (`$0` with `.pl`/`.py`/`.sh` stripped), so a symlink `kimi-chat` → `ai-chat.py` will look for `kimi-chat.env` first, then fall back to the generic name. Search order (highest priority first):
+All scripts derive the env filename from the script name (`$0` with `.pl`/`.py`/`.js`/`.sh` stripped), so a symlink `kimi-chat` → `ai-chat.js` will look for `kimi-chat.env` first, then fall back to the generic name. Search order (highest priority first):
 1. `--env <file>` option
 2. `./$PROG.env`  (fallback: `./ai-curl.env` / `./ai-chat.env`)
 3. `./.chatedit/$PROG.env`  (fallback: `./.chatedit/ai-curl.env` / `./.chatedit/ai-chat.env`)
@@ -141,6 +143,8 @@ The main flow inside `run()`:
 | `envsubst` | Required | `ai-curl.sh` (from `gettext` package) |
 | Python 3.8+ | Required | `ai-chat.py` |
 | `openai` SDK | Required | `ai-chat.py` (`pip install openai` or `apt install python3-openai`) |
+| Node.js 18+ | Required | `ai-chat.js` |
+| `openai` npm | Required | `ai-chat.js` (`cd node/ && npm install`) |
 
 ## Testing
 
@@ -204,6 +208,32 @@ with patch.object(ai_chat, 'call_api', return_value=('assistant', 'Hello')):
     ai_chat.run_non_stream(...)
 ```
 
+### Node.js tests
+
+Unit tests live in `node/test/` and use only `node:test` (built-in, Node 18+). Run with:
+
+```bash
+node --test node/test/*.js              # run all tests
+node --test node/test/test_parse_chat.js  # run a single file
+```
+
+Test files:
+
+| File | What it tests |
+|------|---------------|
+| `test_normalize_role.js` | `normalizeRole` — abbreviation and case handling |
+| `test_parse_chat.js` | `parseChat` — roles, comments, code blocks, `@file`, `!cmd` |
+| `test_fix_heading.js` | `fixHeadingLevel` — heading shifts, code-block protection, stream state |
+| `test_find_config.js` | `findConfigFile` / `loadEnv` — search order, CLI overrides |
+| `test_decode_to_md.js` | `decodeToMd` — JSON → Markdown (subprocess); `--encode` output |
+| `test_api_mock.js` | full pipeline with mock client; `runNonStream` + file append + reformat |
+
+**Mocking `callApi`** (Node.js): pass a mock client object directly to `runNonStream`/`runStream`:
+```javascript
+const mockClient = { chat: { completions: { create: async () => ({ choices: [{ message: { role: 'assistant', content: 'Hello' } }] }) } } };
+await runNonStream(mockClient, 'model', {}, messages, 'test.md');
+```
+
 Manual sanity checks with existing testdata:
 ```bash
 # Round-trip encode/decode
@@ -211,6 +241,7 @@ cat testdata/chat-hello.md | perl/ai-chat.pl --encode | perl/ai-chat.pl --decode
 
 # Inspect assembled JSON
 perl/ai-chat.pl --encode testdata/chat-system.md | jq .
+node node/ai-chat.js --encode testdata/chat-hello.md | jq .
 
 # Test ai-curl.sh with a static JSON file (requires valid ai-curl.env)
 bash/ai-curl.sh testdata/chat-simple.json
@@ -269,10 +300,11 @@ Non-heading lines fall through to the default `>>` (indent) / `<<` (unindent) be
 
 ```bash
 make help          # list targets
-make test          # run all tests (Perl + Python)
+make test          # run all tests (Perl + Python + Node)
 make test-perl     # run prove perl/t/
 make test-python   # run python3 -m unittest discover python/tests/
-make install       # install ai-chat.pl, ai-curl.sh, ai-chat.py to ~/bin
+make test-node     # run node --test node/test/*.js
+make install       # install ai-chat.pl, ai-curl.sh, ai-chat.py, ai-chat.js to ~/bin
                    # only copies files newer than the installed version
                    # override: make install INSTALL_DIR=/usr/local/bin
 ```

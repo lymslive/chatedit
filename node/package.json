@@ -1,0 +1,16 @@
+{
+  "name": "ai-chat-node",
+  "version": "1.0.0",
+  "description": "AI chat CLI tool - Markdown to API",
+  "bin": {
+    "ai-chat": "./ai-chat.js"
+  },
+  "main": "./ai-chat.js",
+  "dependencies": {
+    "openai": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

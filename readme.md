@@ -15,12 +15,14 @@
 | `bash/ai-curl.sh` | Bash | 封装 curl，发送 JSON 请求到 AI API |
 | `perl/ai-chat.pl` | Perl | 解析 Markdown 聊天文件，组装并发送 API 请求，回写文件 |
 | `python/ai-chat.py` | Python | 与 `ai-chat.pl` 功能对等的 Python 实现，使用 `openai` SDK 替代 curl |
+| `node/ai-chat.js` | Node.js | 与 `ai-chat.pl` 功能对等的 Node.js 实现，async/await 架构，npm 包分发 |
 
-Perl 版与 Python 版接口完全一致，可互换使用；两者也可与 Bash 版管道联用：
+Perl、Python、Node.js 三版接口完全一致，可互换使用；也可与 Bash 版管道联用：
 
 ```bash
 cat chat.md | perl/ai-chat.pl --encode | bash/ai-curl.sh
 python3 python/ai-chat.py -a chat.md   # Python 版等价用法
+node node/ai-chat.js -a chat.md        # Node.js 版等价用法
 ```
 
 ## 快速开始
@@ -161,6 +163,25 @@ python3 python/ai-chat.py --encode chat.md | jq .
 - `API_URL` 支持完整路径（如 `https://api.xxx.com/v1/chat/completions`）或只写到 `/v1`，两种格式均可
 - 不支持 Anthropic 原生格式响应（只支持 OpenAI 兼容格式）
 
+### node/ai-chat.js
+
+与 `ai-chat.pl` 选项完全对应，直接替换调用即可：
+
+```bash
+node node/ai-chat.js -a chat.md
+node node/ai-chat.js --stream -a chat.md
+node node/ai-chat.js --encode chat.md | jq .
+```
+
+主要差异：
+- 使用 `openai` SDK（唯一第三方包），需要先安装依赖：
+  ```bash
+  cd node/ && npm install
+  ```
+- 采用 async/await 架构，全程异步 I/O
+- 需按 npm 包结构组织，不能单文件分发；可通过 `npm link` 将 `ai-chat` 命令链接到全局 PATH
+- `API_URL` 同 Python 版，支持完整路径或只到 `/v1`
+
 ## Markdown 聊天文件格式
 
 详见 [docs/chat-format.md](docs/chat-format.md)，核心规则如下：
@@ -219,7 +240,7 @@ perl/ai-chat.pl --encode chat.md | jq .
 将脚本复制到 `$PATH`（默认安装到 `~/bin`，仅在源文件比已安装版本新时才复制）：
 
 ```bash
-make install                            # 安装三个脚本：ai-chat.pl、ai-curl.sh、ai-chat.py
+make install                            # 安装四个脚本：ai-chat.pl、ai-curl.sh、ai-chat.py、ai-chat.js
 make install INSTALL_DIR=/usr/local/bin # 指定目录
 ```
 
@@ -267,6 +288,10 @@ chatedit/
 ├── python/
 │   ├── ai-chat.py          # 与 ai-chat.pl 功能对等的 Python 实现
 │   └── tests/              # Python 单元测试（unittest）
+├── node/
+│   ├── ai-chat.js          # 与 ai-chat.pl 功能对等的 Node.js 实现（async/await）
+│   ├── package.json        # npm 包描述，依赖 openai
+│   └── test/               # Node.js 单元测试（node:test）
 ├── vim/                    # git 子模块 → github.com/lymslive/chatedit-vim
 │   ├── plugin/
 │   │   └── chatedit.vim    # Vim 插件主体（:AI / :AR 命令）
@@ -285,7 +310,7 @@ chatedit/
 │   ├── chat-hello.md       # 简单对话 Markdown 示例
 │   └── chat-system.md      # 带 system 消息的多轮对话示例
 ├── Makefile                # test / install / help
-├── ai-curl.env             # 本地 API 配置（不纳入版本控制）
+├── .chatedit/              # 本地 API 配置（不纳入版本控制）
 └── readme.md
 ```
 
@@ -298,6 +323,7 @@ chatedit/
 | `perl 5` + `JSON::PP` | Perl 5.14+ 自带，无需额外安装（`ai-chat.pl` 使用） |
 | `envsubst` | 环境变量替换（`gettext` 包，`ai-curl.sh` 使用） |
 | `python3` + `openai` SDK | `ai-chat.py` 使用；SDK 安装：`sudo apt install python3-openai` |
+| `node` (>=18) + `openai` npm | `ai-chat.js` 使用；在 `node/` 目录执行 `npm install` |
 
 ## 兼容的 API 格式
 
@@ -312,6 +338,6 @@ chatedit/
 | 已完成 | Perl 实现（`perl/ai-chat.pl`） |
 | 已完成 | Vim 插件集成（`vim/` 子模块） |
 | 已完成 | Python 实现（`python/ai-chat.py`） |
-| 计划中 | Node.js 实现 |
+| 已完成 | Node.js 实现（`node/ai-chat.js`） |
 | 计划中 | 编译型实现（C++ / Rust / Go） |
 | 计划中 | Web 浏览器前端页面 |

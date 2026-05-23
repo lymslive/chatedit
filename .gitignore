@@ -7,3 +7,5 @@ local-*
 !testdata/.chatedit/
 !testdata/.chatedit/**
 __pycache__/
+node/node_modules/
+node/package-lock.json
