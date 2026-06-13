@@ -1374,3 +1374,54 @@ print STDOUT scalar fix_heading_level($delta_text);
 
 ### COMMIT: 412a22401f627158618a78150099fc9cd2e92c01
 
+## TASK:20260613-210359
+-----------------------
+
+> TODO: 2026-06-13/1 --reformat 选项功能优化
+
+### 需求目标
+
+修改 `--reformat=1` 的 `fix_heading_level` 行为：不再无条件给所有标题增加一级，
+而是追踪是否遇到了 h1 或 h2 标题，遇到后才开始修正。若整个 AI 输出没有任何
+一级或二级标题（全部从三级开始），则不做任何修正。
+
+### 实施内容
+
+**核心思路**：放弃新增 `--reformat=2` 模式的方案，直接改进 `--reformat=1` 的行为。
+在 `fix_heading_level` 函数中新增 `has_top` 状态参数，仅在遇到 `#`/`##` 标题后才
+触发后续标题修正。该状态天然适配流式场景（跨 delta 保持）。
+
+**Perl `perl/ai-chat.pl`**：
+- `fix_heading_level`：新增可选参数 `$has_top_ref`（标量引用），在标题修正前先判断
+  是否已触发；触发前遇到的 h3+ 标题跳过不修正
+- `_process_stream_lines`：新增 `$has_top_heading` 状态，传入 `fix_heading_level`
+
+**Python `python/ai-chat.py`**：
+- `fix_heading_level`：新增可选参数 `has_top_heading`（列表 `[bool]`），逻辑同 Perl
+- `call_api_stream`：新增 `has_top_heading` 状态追踪
+
+**Node.js `node/ai-chat.js`**：
+- `fixHeadingLevel`：新增可选参数 `hasTopHeading`（数组 `[bool]`），逻辑同上
+- `callApiStream`：新增 `hasTopHeading` 状态追踪
+
+**行为变化总结**：
+- 有 h1/h2 的输出：行为不变（触发后所有标题正常修正）
+- 无 h1/h2 的输出：原行为会给 h3+ 增加一级 → 新行为不变
+- 流式处理：状态随 delta 流自然传递，与代码块状态追踪机制一致
+
+### 测试更新
+
+| 测试文件 | 变更 |
+|---------|------|
+| `perl/t/10-reformat.t` | 更新 h3/h4 单测为"无触发不变"；新增 5 组 `has_top_ref` 及组合状态测试 |
+| `python/tests/test_fix_heading.py` | 同上；新增 `test_has_top_heading_cross_calls` 和 `test_in_code_and_has_top_together` |
+| `node/test/test_fix_heading.js` | 同上；新增跨调用状态测试及双状态组合测试 |
+
+全部 357 个测试通过（Perl 270 + Python 51 + Node.js 36）。
+
+### 影响范围
+
+- 无需新增命令行选项或模式值
+- Vim 插件无需改动（`--reformat 1` 自动获得新行为）
+- `print_response` / `append_to_file` / `run_stream` 主流程调用不变
+- 改变 `fix_heading_level` 语义：现在需要 h1/h2 作为"触发条件"

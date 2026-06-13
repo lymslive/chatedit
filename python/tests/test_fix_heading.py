@@ -24,20 +24,23 @@ class TestFixHeadingLevel(unittest.TestCase):
         self.assertEqual(result, '### Title')
         self.assertEqual(count, 1)
 
-    def test_h3_becomes_h4(self):
+    def test_h3_unchanged_without_trigger(self):
+        """无 h1/h2 触发时 h3 不变"""
         result, count = self._fix('### Title')
-        self.assertEqual(result, '#### Title')
-        self.assertEqual(count, 1)
+        self.assertEqual(result, '### Title')
+        self.assertEqual(count, 0)
 
-    def test_h5_becomes_h6(self):
+    def test_h5_unchanged_without_trigger(self):
+        """无 h1/h2 触发时 h5 不变"""
         result, count = self._fix('##### Title')
-        self.assertEqual(result, '###### Title')
-        self.assertEqual(count, 1)
+        self.assertEqual(result, '##### Title')
+        self.assertEqual(count, 0)
 
-    def test_h6_unchanged(self):
-        result, count = self._fix('###### Title')
-        self.assertEqual(result, '###### Title')
-        self.assertEqual(count, 1)
+    def test_h3_fixed_after_h2_trigger(self):
+        """h2 触发后，后续 h3 修正为 h4"""
+        result, count = self._fix('## H2\n### H3\n')
+        self.assertEqual(result, '### H2\n#### H3\n')
+        self.assertEqual(count, 2)
 
     def test_no_heading_unchanged(self):
         result, count = self._fix('just text')
@@ -67,7 +70,7 @@ class TestFixHeadingLevel(unittest.TestCase):
 
 
 class TestFixHeadingStreamState(unittest.TestCase):
-    """流式场景：跨调用保持代码块状态"""
+    """流式场景：跨调用保持代码块状态与智能触发状态"""
 
     def test_state_survives_across_calls(self):
         state = [False]
@@ -90,6 +93,38 @@ class TestFixHeadingStreamState(unittest.TestCase):
         self.assertEqual(c1, 1)
         self.assertIn('# inside', r1)
         self.assertIn('### outside', r1)
+
+    def test_has_top_heading_cross_calls(self):
+        """has_top_heading 跨调用：无触发时不变，遇 h2 后修正"""
+        has_top = [False]
+        r1, c1 = fix('### Section\ncontent\n', has_top_heading=has_top)
+        self.assertEqual(c1, 0)
+        self.assertFalse(has_top[0])
+        self.assertIn('### Section', r1)
+
+        r2, c2 = fix('## Title\n### Detail\n', has_top_heading=has_top)
+        self.assertTrue(has_top[0])
+        self.assertEqual(c2, 2)
+        self.assertIn('### Title', r2)
+        self.assertIn('#### Detail', r2)
+
+        r3, c3 = fix('### More\n', has_top_heading=has_top)
+        self.assertTrue(has_top[0])
+        self.assertEqual(c3, 1)
+        self.assertIn('#### More', r3)
+
+    def test_in_code_and_has_top_together(self):
+        """in_code_state 与 has_top_heading 可同时使用"""
+        in_code = [False]
+        has_top = [False]
+        r, c = fix('### Before\n```\n## inside\n```\n## Trigger\n### After\n',
+                   in_code_state=in_code, has_top_heading=has_top)
+        self.assertFalse(in_code[0])
+        self.assertTrue(has_top[0])
+        self.assertIn('### Before', r)
+        self.assertIn('## inside', r)
+        self.assertIn('### Trigger', r)
+        self.assertIn('#### After', r)
 
 
 if __name__ == '__main__':

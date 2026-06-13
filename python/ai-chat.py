@@ -537,17 +537,19 @@ def save_to_postdir(directory, template, messages):
 # 响应格式化
 # ============================================================================
 
-def fix_heading_level(content, in_code_state=None):
+def fix_heading_level(content, in_code_state=None, has_top_heading=None):
     """
     修正 AI 回复中的 Markdown 标题等级。
     h1 → h3，h2 → h3，h3+ 各增加一级（最多 h6）。
     代码块（三反引号）内的标题保持原样。
+    仅在遇到 h1/h2 标题后才开始修正（智能触发），若全文无 h1/h2 则不做任何修正。
 
     in_code_state: 列表 [bool]，供流式场景跨调用保持代码块状态。
-                   未传入时使用函数内局部状态，仅作用于本次调用。
+    has_top_heading: 列表 [bool]，追踪是否已遇到 h1/h2 触发级标题。
     返回 (result_str, count)
     """
     state = in_code_state if in_code_state is not None else [False]
+    has_top = has_top_heading if has_top_heading is not None else [False]
     lines = content.split('\n')
     count = 0
     for i, line in enumerate(lines):
@@ -558,8 +560,16 @@ def fix_heading_level(content, in_code_state=None):
             continue
         if not line.startswith('#'):
             continue
-        count += 1
         level = len(line) - len(line.lstrip('#'))
+
+        # 智能触发：尚未遇到 h1/h2 时，检查当前标题是否为触发级
+        if not has_top[0]:
+            if level <= 2:
+                has_top[0] = True   # h1/h2 触发后续修正
+            else:
+                continue            # h3+ 且未触发，跳过修正
+
+        count += 1
         if level == 1:
             lines[i] = '##' + line    # # → ###
         elif level < 6:
@@ -658,6 +668,7 @@ def call_api_stream(client, model, messages, reformat):
     role_printed = False
     prev_ends_nl = True
     in_code_state = [False]
+    has_top_heading = [False]
 
     stream = client.chat.completions.create(model=model, messages=messages, stream=True)
     for chunk in stream:
@@ -677,11 +688,11 @@ def call_api_stream(client, model, messages, reformat):
 
         if reformat:
             if prev_ends_nl:
-                fixed, _ = fix_heading_level(delta_text, in_code_state)
+                fixed, _ = fix_heading_level(delta_text, in_code_state, has_top_heading)
                 sys.stdout.write(fixed)
             elif '\n' in delta_text:
                 nl_pos = delta_text.index('\n')
-                fixed_tail, _ = fix_heading_level(delta_text[nl_pos + 1:], in_code_state)
+                fixed_tail, _ = fix_heading_level(delta_text[nl_pos + 1:], in_code_state, has_top_heading)
                 sys.stdout.write(delta_text[:nl_pos + 1] + fixed_tail)
             else:
                 sys.stdout.write(delta_text)

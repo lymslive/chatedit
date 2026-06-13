@@ -17,19 +17,22 @@ test('h2 → h3', () => {
     assert.equal(count, 1);
 });
 
-test('h3 → h4', () => {
-    const [result] = fixHeadingLevel('### Hello');
-    assert.equal(result, '#### Hello');
+test('h3 无触发时不变', () => {
+    const [result, count] = fixHeadingLevel('### Hello');
+    assert.equal(result, '### Hello');
+    assert.equal(count, 0);
 });
 
-test('h5 → h6', () => {
-    const [result] = fixHeadingLevel('##### Hello');
-    assert.equal(result, '###### Hello');
+test('h5 无触发时不变', () => {
+    const [result, count] = fixHeadingLevel('##### Hello');
+    assert.equal(result, '##### Hello');
+    assert.equal(count, 0);
 });
 
-test('h6 保持不变', () => {
-    const [result] = fixHeadingLevel('###### Hello');
+test('h6 无触发时 count=0', () => {
+    const [result, count] = fixHeadingLevel('###### Hello');
     assert.equal(result, '###### Hello');
+    assert.equal(count, 0);
 });
 
 test('非标题行不变', () => {
@@ -50,14 +53,39 @@ test('代码块内的标题不修改', () => {
     assert.equal(result, '```\n# code comment\n```\n### real heading');
 });
 
-test('跨调用保持代码块状态', () => {
-    const state = [false];
-    // 第一次调用：进入代码块但未关闭
-    const [r1] = fixHeadingLevel('```\n# in code', state);
-    assert.equal(r1, '```\n# in code');
-    assert.equal(state[0], true);
-    // 第二次调用：仍在代码块内，关闭后正常标题
-    const [r2] = fixHeadingLevel('# still in code\n```\n# after code', state);
-    assert.equal(r2, '# still in code\n```\n### after code');
-    assert.equal(state[0], false);
+test('跨调用保持 hasTopHeading 智能触发状态', () => {
+    const hasTop = [false];
+    // 第一次调用：只有 h3，无触发
+    const [r1, c1] = fixHeadingLevel('### Section\ncontent\n', null, hasTop);
+    assert.equal(c1, 0);
+    assert.equal(hasTop[0], false);
+    assert.ok(r1.includes('### Section'));
+
+    // 第二次调用：h2 触发，后续 h3 修正
+    const [r2, c2] = fixHeadingLevel('## Title\n### Detail\n', null, hasTop);
+    assert.equal(hasTop[0], true);
+    assert.equal(c2, 2);
+    assert.ok(r2.includes('### Title'));
+    assert.ok(r2.includes('#### Detail'));
+
+    // 第三次调用：状态保持，继续修正
+    const [r3, c3] = fixHeadingLevel('### More\n', null, hasTop);
+    assert.equal(hasTop[0], true);
+    assert.equal(c3, 1);
+    assert.ok(r3.includes('#### More'));
+});
+
+test('inCodeState 与 hasTopHeading 可同时使用', () => {
+    const inCode = [false];
+    const hasTop = [false];
+    const [r] = fixHeadingLevel(
+        '### Before\n```\n## inside\n```\n## Trigger\n### After\n',
+        inCode, hasTop
+    );
+    assert.equal(inCode[0], false);
+    assert.equal(hasTop[0], true);
+    assert.ok(r.includes('### Before'));   // 触发前不变
+    assert.ok(r.includes('## inside'));    // 代码块内不变
+    assert.ok(r.includes('### Trigger'));  // h2 自身修正
+    assert.ok(r.includes('#### After'));   // 触发后 h3 修正
 });

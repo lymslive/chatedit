@@ -534,11 +534,12 @@ sub _process_stream_lines
 {
     my ($fh, $reformat) = @_;
 
-    my $content      = '';
-    my $role         = 'assistant';   # 默认值；实际角色从首个 chunk 中提取
-    my $role_printed = 0;
-    my $prev_ends_nl = 1;             # 上一个 delta 末尾是否换行（初始为1表示行首）
-    my $in_code_block = 0;            # 追踪 reformat 输出中的代码块开关状态
+    my $content         = '';
+    my $role            = 'assistant';   # 默认值；实际角色从首个 chunk 中提取
+    my $role_printed    = 0;
+    my $prev_ends_nl    = 1;             # 上一个 delta 末尾是否换行（初始为1表示行首）
+    my $in_code_block   = 0;             # 追踪 reformat 输出中的代码块开关状态
+    my $has_top_heading = 0;             # 追踪是否已遇到 h1/h2 触发级标题
 
     while (defined(my $line = <$fh>)) {
         $line =~ s/\r?\n$//;
@@ -562,13 +563,13 @@ sub _process_stream_lines
             if ($reformat) {
                 if ($prev_ends_nl) {
                     # delta 首字符即行首，整段均可修正
-                    print STDOUT scalar fix_heading_level($delta_text, \$in_code_block);
+                    print STDOUT scalar fix_heading_level($delta_text, \$in_code_block, \$has_top_heading);
                 }
                 elsif (index($delta_text, "\n") >= 0) {
                     # delta 首段为行中间，不修正；首个换行后才是新行首
                     my $nl_pos = index($delta_text, "\n");
                     print STDOUT substr($delta_text, 0, $nl_pos + 1)
-                               . fix_heading_level(substr($delta_text, $nl_pos + 1), \$in_code_block);
+                               . fix_heading_level(substr($delta_text, $nl_pos + 1), \$in_code_block, \$has_top_heading);
                 }
                 else {
                     print STDOUT $delta_text;
@@ -620,15 +621,20 @@ sub parse_response
 
 # 修正 AI 回复中的 Markdown 标题等级
 # h1 → h3，h2 → h3，h3+ 各增加一级
-# 可选参数 $in_code_ref：标量引用，追踪代码块开关状态（用于跨调用的流式场景）
+# 可选参数：
+#   $in_code_ref - 标量引用，追踪代码块开关状态（用于跨调用的流式场景）
+#   $has_top_ref - 标量引用，追踪是否已遇到一级/二级标题；遇到后才开始修正
 # 未传入时使用局部变量，支持在单次调用内处理完整的代码块
 # 三反引号围栏内的标题行保持原样
 sub fix_heading_level
 {
-    my ($content, $in_code_ref) = @_;
+    my ($content, $in_code_ref, $has_top_ref) = @_;
 
     my $local_in_code = 0;
     $in_code_ref //= \$local_in_code;
+
+    my $local_has_top = 0;
+    $has_top_ref //= \$local_has_top;
 
     my @lines = split /\n/, $content, -1;
     my $count = 0;
@@ -640,8 +646,20 @@ sub fix_heading_level
         }
         next if $$in_code_ref;          # 代码块内：跳过标题修正
         next unless $line =~ /^(#+)/;
-        $count++;
+
         my $level = length($1);
+
+        # 智能触发：尚未遇到 h1/h2 时，检查当前标题是否为触发级
+        unless ($$has_top_ref) {
+            if ($level <= 2) {
+                $$has_top_ref = 1;      # h1/h2 触发后续修正
+            }
+            else {
+                next;                   # h3+ 且未触发，跳过修正
+            }
+        }
+
+        $count++;
         if ($level == 1) {
             $line = '##' . $line;  # # → ### (前置两个 #)
         }

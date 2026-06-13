@@ -566,16 +566,27 @@ function saveToPostdir(directory, template, messages) {
 // 响应格式化（同步）
 // ============================================================================
 
-function fixHeadingLevel(content, inCodeState) {
+function fixHeadingLevel(content, inCodeState, hasTopHeading) {
     const state = inCodeState || [false];
+    const hasTop = hasTopHeading || [false];
     const lines = content.split('\n');
     let count = 0;
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (line.startsWith('```')) { state[0] = !state[0]; continue; }
         if (state[0] || !line.startsWith('#')) continue;
-        count++;
         const level = line.match(/^(#+)/)[1].length;
+
+        // 智能触发：尚未遇到 h1/h2 时，检查当前标题是否为触发级
+        if (!hasTop[0]) {
+            if (level <= 2) {
+                hasTop[0] = true;    // h1/h2 触发后续修正
+            } else {
+                continue;            // h3+ 且未触发，跳过修正
+            }
+        }
+
+        count++;
         if (level === 1)    lines[i] = '##' + line;   // # → ###
         else if (level < 6) lines[i] = '#' + line;    // h2→h3, ..., h5→h6
         // level >= 6: 已到最大标题级，保持不变
@@ -655,6 +666,7 @@ async function callApiStream(client, model, messages, reformat) {
     let role = 'assistant', content = '';
     let rolePrinted = false, prevEndsNl = true;
     const inCodeState = [false];
+    const hasTopHeading = [false];
 
     const stream = await client.chat.completions.create({ model, messages, stream: true });
     for await (const chunk of stream) {
@@ -672,12 +684,12 @@ async function callApiStream(client, model, messages, reformat) {
 
         if (reformat) {
             if (prevEndsNl) {
-                process.stdout.write(fixHeadingLevel(deltaText, inCodeState)[0]);
+                process.stdout.write(fixHeadingLevel(deltaText, inCodeState, hasTopHeading)[0]);
             } else if (deltaText.includes('\n')) {
                 const nlPos = deltaText.indexOf('\n');
                 process.stdout.write(
                     deltaText.slice(0, nlPos + 1) +
-                    fixHeadingLevel(deltaText.slice(nlPos + 1), inCodeState)[0]
+                    fixHeadingLevel(deltaText.slice(nlPos + 1), inCodeState, hasTopHeading)[0]
                 );
             } else {
                 process.stdout.write(deltaText);

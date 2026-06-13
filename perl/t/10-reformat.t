@@ -26,11 +26,11 @@ is(fix_heading_level("# Title"),      "### Title",      'h1 → h3 (ASCII)');
 is(fix_heading_level("## 二级标题"),  "### 二级标题",   'h2 → h3');
 is(fix_heading_level("## Section"),   "### Section",    'h2 → h3 (ASCII)');
 
-# h3 → h4
-is(fix_heading_level("### 三级"),     "#### 三级",      'h3 → h4');
+# h3 → h4（无 h1/h2 触发时不变）
+is(fix_heading_level("### 三级"),     "### 三级",       'h3 无触发不变');
 
-# h4 → h5
-is(fix_heading_level("#### 四级"),    "##### 四级",     'h4 → h5');
+# h4 → h5（无 h1/h2 触发时不变）
+is(fix_heading_level("#### 四级"),    "#### 四级",      'h4 无触发不变');
 
 # 无空格的 # 也视为标题（流式 delta 可能只输出 ## 等片段）
 is(fix_heading_level("#标签"),        "###标签",        '#无空格也视为标题');
@@ -259,6 +259,62 @@ is(fix_heading_level("    缩进行"),   "    缩进行",     '缩进行不变')
 
     my $r3 = fix_heading_level("## 代码块外", \$state);
     is($r3, "### 代码块外", '$in_code_ref: 代码块外标题正常修正');
+}
+
+# ============================================================================
+# fix_heading_level：$has_top_ref 智能触发（仅遇 h1/h2 后才修正）
+# ============================================================================
+
+# 无 h1/h2 时，所有 h3+ 标题不变
+{
+    my $input = "### 章节一\n\n内容。\n\n#### 小节\n\n更多。\n\n### 章节二";
+    my $want  = "### 章节一\n\n内容。\n\n#### 小节\n\n更多。\n\n### 章节二";
+    is(fix_heading_level($input), $want, '无 h1/h2: 所有标题不变');
+    my ($out, $cnt) = fix_heading_level($input);
+    is($cnt, 0, '无 h1/h2: reformed_count = 0');
+}
+
+# h2 出现在中间：之前的 h3 不变，之后全部修正
+{
+    my $input = "### 前言\n\n## 正题\n\n### 细节";
+    my $want  = "### 前言\n\n### 正题\n\n#### 细节";
+    is(fix_heading_level($input), $want, 'h2 触发：之前的 h3 不变，之后全部修正');
+}
+
+# h1 出现在末尾：前面 h3 不变，h1 自身修正
+{
+    my $input = "### 细节\n\n# 总结";
+    my $want  = "### 细节\n\n### 总结";
+    is(fix_heading_level($input), $want, 'h1 在末尾触发：前面 h3 不变，h1 修正');
+}
+
+# $has_top_ref 跨调用状态保持：第一次无触发，第二次遇 h2 后修正当前及后续
+{
+    my $has_top = 0;
+    my $r1 = fix_heading_level("### 章节一\n\n内容", undef, \$has_top);
+    is($has_top, 0, '$has_top_ref: 无 h1/h2 时保持 0');
+    is($r1,     "### 章节一\n\n内容", '$has_top_ref: 未触发时 h3 不变');
+
+    my $r2 = fix_heading_level("## 正题\n\n### 细节", undef, \$has_top);
+    is($has_top, 1, '$has_top_ref: 遇 h2 后置 1');
+    is($r2,     "### 正题\n\n#### 细节", '$has_top_ref: 触发后标题修正');
+
+    my $r3 = fix_heading_level("### 后续", undef, \$has_top);
+    is($has_top, 1, '$has_top_ref: 跨调用状态保持为 1');
+    is($r3,     "#### 后续", '$has_top_ref: 后续调用中标题继续修正');
+}
+
+# $has_top_ref 与 $in_code_ref 可同时使用
+{
+    my $in_code = 0;
+    my $has_top = 0;
+    my $r1 = fix_heading_level("### 开头\n\n```\n## 代码内\n```\n\n## 触发标题\n\n### 结尾", \$in_code, \$has_top);
+    ok(!$in_code, '$has_top + $in_code: 代码块正确关闭（falsy 状态）');
+    is($has_top, 1, '$has_top + $in_code: h2 触发');
+    like($r1, qr/## 代码内/,    '$has_top + $in_code: 代码块内 ## 不变');
+    like($r1, qr/### 触发标题/, '$has_top + $in_code: h2 修正为 h3');
+    like($r1, qr/### 开头/,     '$has_top + $in_code: 触发前的 ### 不变');
+    like($r1, qr/#### 结尾/,    '$has_top + $in_code: 触发后的 h3 修正为 h4');
 }
 
 # 文件末尾已有空白行 → 始终补一个换行（简化逻辑，用户可自行删除多余空行）
